@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CardItem } from "@/lib/types";
+import { CardItem, Comment } from "@/lib/types";
 
 function formatDateTime(iso: string) {
   return new Date(iso).toLocaleString("es", {
@@ -25,10 +25,14 @@ export function CardModal({
   itemLabel: string;
   itemOfPhrase: string;
   onClose: () => void;
-  onSave: (cardId: string, updates: { name: string; newComments: string[] }) => void;
+  onSave: (
+    cardId: string,
+    updates: { name: string; comments: Comment[]; newComments: string[] }
+  ) => void;
   onDelete: (cardId: string) => void;
 }) {
   const [name, setName] = useState(card.name);
+  const [comments, setComments] = useState<Comment[]>(card.comments);
   const [draftComments, setDraftComments] = useState<string[]>([]);
   const [commentText, setCommentText] = useState("");
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -40,8 +44,16 @@ export function CardModal({
     setCommentText("");
   }
 
+  function deleteComment(commentId: string) {
+    setComments((prev) => prev.filter((c) => c.id !== commentId));
+  }
+
+  function deleteDraftComment(index: number) {
+    setDraftComments((prev) => prev.filter((_, i) => i !== index));
+  }
+
   function handleSave() {
-    onSave(card.id, { name: name.trim() || card.name, newComments: draftComments });
+    onSave(card.id, { name: name.trim() || card.name, comments, newComments: draftComments });
     onClose();
   }
 
@@ -87,27 +99,47 @@ export function CardModal({
             Historial de comentarios
           </h3>
           <div className="flex flex-col gap-2">
-            {card.comments.map((comment) => (
+            {comments.map((comment) => (
               <div
                 key={comment.id}
-                className="rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2"
+                className="flex items-start justify-between gap-3 rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2"
               >
-                <p className="text-sm text-neutral-200">{comment.text}</p>
-                <p className="mt-1 text-xs text-neutral-500">
-                  {formatDateTime(comment.createdAt)}
-                </p>
+                <div>
+                  <p className="text-sm text-neutral-200">{comment.text}</p>
+                  <p className="mt-1 text-xs text-neutral-500">
+                    {formatDateTime(comment.createdAt)}
+                  </p>
+                </div>
+                <button
+                  onClick={() => deleteComment(comment.id)}
+                  className="text-neutral-500 hover:text-red-400"
+                  aria-label="Eliminar comentario"
+                  title="Eliminar comentario"
+                >
+                  ✕
+                </button>
               </div>
             ))}
             {draftComments.map((text, i) => (
               <div
                 key={`draft-${i}`}
-                className="rounded-md border border-deinsa-orange/40 bg-deinsa-orange/5 px-3 py-2"
+                className="flex items-start justify-between gap-3 rounded-md border border-deinsa-orange/40 bg-deinsa-orange/5 px-3 py-2"
               >
-                <p className="text-sm text-neutral-200">{text}</p>
-                <p className="mt-1 text-xs text-deinsa-orange">Sin guardar</p>
+                <div>
+                  <p className="text-sm text-neutral-200">{text}</p>
+                  <p className="mt-1 text-xs text-deinsa-orange">Sin guardar</p>
+                </div>
+                <button
+                  onClick={() => deleteDraftComment(i)}
+                  className="text-neutral-500 hover:text-red-400"
+                  aria-label="Eliminar comentario"
+                  title="Eliminar comentario"
+                >
+                  ✕
+                </button>
               </div>
             ))}
-            {card.comments.length === 0 && draftComments.length === 0 && (
+            {comments.length === 0 && draftComments.length === 0 && (
               <p className="text-sm text-neutral-600">Todavía no hay comentarios.</p>
             )}
           </div>

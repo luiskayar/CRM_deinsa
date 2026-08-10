@@ -75,10 +75,8 @@ export function useBoard(boardType: BoardType) {
 
   async function updateCard(
     cardId: string,
-    updates: { name: string; newComments: string[] }
+    updates: { name: string; comments: Comment[]; newComments: string[] }
   ) {
-    const card = cards.find((c) => c.id === cardId);
-    if (!card) return;
     const addedComments: Comment[] = updates.newComments.map((text) => ({
       id: createCommentId(),
       text,
@@ -86,7 +84,7 @@ export function useBoard(boardType: BoardType) {
     }));
     await updateDoc(doc(db, BOARD_COLLECTION[boardType], cardId), {
       name: updates.name,
-      comments: [...card.comments, ...addedComments],
+      comments: [...updates.comments, ...addedComments],
     });
   }
 
