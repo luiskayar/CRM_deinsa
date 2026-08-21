@@ -13,13 +13,21 @@ import {
   BOARD_ITEM_LABEL,
   BOARD_ITEM_NEW_LABEL,
   BOARD_ITEM_OF_PHRASE,
+  BOARD_LABELS,
+  EXPORT_SHEET_NAME,
 } from "@/lib/constants";
+import { cardsToExportRows, EXPORT_HEADERS, exportRowsToPdf, exportSheetsToExcel } from "@/lib/export";
 import { normalizeText } from "@/lib/search";
 import { BoardType, CardItem } from "@/lib/types";
-import { useBoard } from "@/hooks/useBoard";
+import { fetchBoardCards, useBoard } from "@/hooks/useBoard";
 import { Column } from "./Column";
 import { CardModal } from "./CardModal";
 import { SearchBar } from "./SearchBar";
+
+const OTHER_BOARD_TYPE: Record<BoardType, BoardType> = {
+  negociaciones: "alianzas",
+  alianzas: "negociaciones",
+};
 
 const AUTO_SCROLL_SPEED = 12; // px por tick mientras el mouse está sobre la flecha
 const ARROW_SCROLL_STEP = 288; // ancho de una columna, para el click/tap
@@ -57,6 +65,55 @@ export function Board({ boardType }: { boardType: BoardType }) {
     }
     return map;
   }, [filteredCards]);
+
+  const [exporting, setExporting] = useState<"pdf" | "excel" | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  async function handleExportPdf() {
+    setExportError(null);
+    setExporting("pdf");
+    try {
+      await exportRowsToPdf({
+        title: `${BOARD_LABELS[boardType]} — Deinsa CRM`,
+        headers: EXPORT_HEADERS,
+        rows: cardsToExportRows(filteredCards, columns),
+        filename: `${boardType}-${new Date().toISOString().slice(0, 10)}.pdf`,
+      });
+    } catch (err) {
+      console.error(err);
+      setExportError("No se pudo generar el PDF.");
+    } finally {
+      setExporting(null);
+    }
+  }
+
+  async function handleExportExcel() {
+    setExportError(null);
+    setExporting("excel");
+    try {
+      const otherBoardType = OTHER_BOARD_TYPE[boardType];
+      const otherCards = await fetchBoardCards(otherBoardType);
+      const currentSheet = {
+        name: EXPORT_SHEET_NAME[boardType],
+        headers: EXPORT_HEADERS,
+        rows: cardsToExportRows(filteredCards, columns),
+      };
+      const otherSheet = {
+        name: EXPORT_SHEET_NAME[otherBoardType],
+        headers: EXPORT_HEADERS,
+        rows: cardsToExportRows(otherCards, BOARD_COLUMNS[otherBoardType]),
+      };
+      await exportSheetsToExcel({
+        sheets: boardType === "negociaciones" ? [currentSheet, otherSheet] : [otherSheet, currentSheet],
+        filename: `deinsa-crm-${new Date().toISOString().slice(0, 10)}.xlsx`,
+      });
+    } catch (err) {
+      console.error(err);
+      setExportError("No se pudo generar el Excel.");
+    } finally {
+      setExporting(null);
+    }
+  }
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const autoScrollIntervalRef = useRef<number | null>(null);
@@ -136,13 +193,37 @@ export function Board({ boardType }: { boardType: BoardType }) {
 
   return (
     <DndContext id={`board-${boardType}`} sensors={sensors} onDragEnd={handleDragEnd}>
-      <div className="shrink-0 px-6 pt-4">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 px-6 pt-4">
         <SearchBar
           value={search}
           onChange={setSearch}
           placeholder={`Buscar ${itemLabel}...`}
         />
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleExportPdf}
+            disabled={exporting !== null}
+            className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-neutral-300 hover:border-deinsa-orange hover:text-deinsa-orange disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {exporting === "pdf" ? "Generando..." : "Exportar PDF"}
+          </button>
+          <button
+            type="button"
+            onClick={handleExportExcel}
+            disabled={exporting !== null}
+            className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-neutral-300 hover:border-deinsa-orange hover:text-deinsa-orange disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {exporting === "excel" ? "Generando..." : "Exportar Excel"}
+          </button>
+        </div>
       </div>
+
+      {exportError && (
+        <div className="mx-6 mt-2 shrink-0 rounded-md border border-red-900 bg-red-950/40 px-3 py-2 text-xs text-red-300">
+          {exportError}
+        </div>
+      )}
 
       {isSearching && filteredCards.length === 0 ? (
         <div className="m-6 rounded-lg border border-neutral-800 bg-neutral-900 p-4 text-sm text-neutral-400">

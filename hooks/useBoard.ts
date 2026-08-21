@@ -6,6 +6,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDocs,
   onSnapshot,
   orderBy,
   query,
@@ -17,6 +18,18 @@ import { BoardType, CardItem, Comment } from "@/lib/types";
 
 function createCommentId() {
   return `comment-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+// Lectura puntual (no suscripción) de un tablero completo, usada para
+// exportar datos de un módulo que no está montado en pantalla.
+export async function fetchBoardCards(boardType: BoardType): Promise<CardItem[]> {
+  const snapshot = await getDocs(
+    query(collection(db, BOARD_COLLECTION[boardType]), orderBy("createdAt", "asc"))
+  );
+  return snapshot.docs.map((docSnap) => ({
+    id: docSnap.id,
+    ...(docSnap.data() as Omit<CardItem, "id">),
+  }));
 }
 
 export function useBoard(boardType: BoardType) {

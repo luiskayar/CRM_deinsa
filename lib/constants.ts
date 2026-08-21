@@ -45,6 +45,12 @@ export const BOARD_ITEM_NEW_LABEL: Record<BoardType, string> = {
   alianzas: "Nuevo aliado",
 };
 
+// Nombres de hoja requeridos para la exportación a Excel (RF-03).
+export const EXPORT_SHEET_NAME: Record<BoardType, string> = {
+  negociaciones: "Leads",
+  alianzas: "Aliados",
+};
+
 export type ColumnAccent = "neutral" | "blue" | "orange" | "amber" | "green" | "red";
 
 // Misma columna (mismo id) usa el mismo color en ambos tableros.
