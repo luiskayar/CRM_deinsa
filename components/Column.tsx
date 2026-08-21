@@ -51,7 +51,7 @@ export function Column({
 
       <div
         ref={setNodeRef}
-        className={`flex min-h-[120px] flex-1 flex-col gap-2 overflow-y-auto p-2.5 transition-colors ${
+        className={`column-scroll flex min-h-[120px] flex-1 flex-col gap-2 overflow-y-auto p-2.5 transition-colors ${
           isOver ? "bg-deinsa-orange/10" : ""
         }`}
       >

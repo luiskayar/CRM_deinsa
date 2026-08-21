@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DndContext,
   DragEndEvent,
@@ -14,15 +14,19 @@ import {
   BOARD_ITEM_NEW_LABEL,
   BOARD_ITEM_OF_PHRASE,
 } from "@/lib/constants";
-import { BoardType } from "@/lib/types";
+import { normalizeText } from "@/lib/search";
+import { BoardType, CardItem } from "@/lib/types";
 import { useBoard } from "@/hooks/useBoard";
 import { Column } from "./Column";
 import { CardModal } from "./CardModal";
+import { SearchBar } from "./SearchBar";
+
+const AUTO_SCROLL_SPEED = 12; // px por tick mientras el mouse está sobre la flecha
+const ARROW_SCROLL_STEP = 288; // ancho de una columna, para el click/tap
 
 export function Board({ boardType }: { boardType: BoardType }) {
   const {
     cards,
-    cardsByColumn,
     loading,
     error,
     moveCard,
@@ -31,10 +35,78 @@ export function Board({ boardType }: { boardType: BoardType }) {
     deleteCard,
   } = useBoard(boardType);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
   const columns = BOARD_COLUMNS[boardType];
   const itemLabel = BOARD_ITEM_LABEL[boardType];
   const itemOfPhrase = BOARD_ITEM_OF_PHRASE[boardType];
   const newItemLabel = BOARD_ITEM_NEW_LABEL[boardType];
+
+  const isSearching = search.trim().length > 0;
+
+  const filteredCards = useMemo(() => {
+    if (!isSearching) return cards;
+    const query = normalizeText(search.trim());
+    return cards.filter((card) => normalizeText(card.name).includes(query));
+  }, [cards, isSearching, search]);
+
+  const filteredCardsByColumn = useMemo(() => {
+    const map: Record<string, CardItem[]> = {};
+    for (const card of filteredCards) {
+      if (!map[card.columnId]) map[card.columnId] = [];
+      map[card.columnId].push(card);
+    }
+    return map;
+  }, [filteredCards]);
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const autoScrollIntervalRef = useRef<number | null>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const updateScrollEdges = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 1);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+  }, []);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    updateScrollEdges();
+    el.addEventListener("scroll", updateScrollEdges);
+    const observer = new ResizeObserver(updateScrollEdges);
+    observer.observe(el);
+    window.addEventListener("resize", updateScrollEdges);
+    return () => {
+      el.removeEventListener("scroll", updateScrollEdges);
+      observer.disconnect();
+      window.removeEventListener("resize", updateScrollEdges);
+    };
+  }, [updateScrollEdges, filteredCardsByColumn]);
+
+  const stopAutoScroll = useCallback(() => {
+    if (autoScrollIntervalRef.current !== null) {
+      window.clearInterval(autoScrollIntervalRef.current);
+      autoScrollIntervalRef.current = null;
+    }
+  }, []);
+
+  const startAutoScroll = useCallback(
+    (direction: "left" | "right") => {
+      stopAutoScroll();
+      autoScrollIntervalRef.current = window.setInterval(() => {
+        const el = scrollRef.current;
+        if (!el) return;
+        const before = el.scrollLeft;
+        el.scrollBy({ left: direction === "left" ? -AUTO_SCROLL_SPEED : AUTO_SCROLL_SPEED });
+        if (el.scrollLeft === before) stopAutoScroll();
+      }, 16);
+    },
+    [stopAutoScroll]
+  );
+
+  useEffect(() => stopAutoScroll, [stopAutoScroll]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -64,19 +136,70 @@ export function Board({ boardType }: { boardType: BoardType }) {
 
   return (
     <DndContext id={`board-${boardType}`} sensors={sensors} onDragEnd={handleDragEnd}>
-      <div className="board-scroll flex gap-4 overflow-x-auto p-6 pb-4">
-        {columns.map((column) => (
-          <Column
-            key={column.id}
-            column={column}
-            cards={cardsByColumn[column.id] ?? []}
-            itemLabel={itemLabel}
-            newItemLabel={newItemLabel}
-            onCardClick={setSelectedCardId}
-            onAddCard={(name) => addCard(column.id, name)}
-          />
-        ))}
+      <div className="shrink-0 px-6 pt-4">
+        <SearchBar
+          value={search}
+          onChange={setSearch}
+          placeholder={`Buscar ${itemLabel}...`}
+        />
       </div>
+
+      {isSearching && filteredCards.length === 0 ? (
+        <div className="m-6 rounded-lg border border-neutral-800 bg-neutral-900 p-4 text-sm text-neutral-400">
+          No se encontraron resultados para &quot;{search.trim()}&quot;.
+        </div>
+      ) : (
+        <div className="relative min-h-0 flex-1">
+          <button
+            type="button"
+            aria-label="Ver columnas anteriores"
+            tabIndex={canScrollLeft ? 0 : -1}
+            onMouseEnter={() => startAutoScroll("left")}
+            onMouseLeave={stopAutoScroll}
+            onClick={() =>
+              scrollRef.current?.scrollBy({ left: -ARROW_SCROLL_STEP, behavior: "smooth" })
+            }
+            className={`absolute left-0 top-1/2 z-10 flex h-20 w-11 -translate-y-1/2 items-center justify-center rounded-r-full border border-l-0 border-neutral-700 bg-neutral-900/80 text-4xl text-neutral-200 shadow-lg backdrop-blur transition-opacity duration-200 hover:border-deinsa-orange hover:text-deinsa-orange ${
+              canScrollLeft ? "opacity-100" : "pointer-events-none opacity-0"
+            }`}
+          >
+            ‹
+          </button>
+
+          <div
+            ref={scrollRef}
+            className="board-scroll flex h-full gap-4 overflow-x-auto p-6 pb-4"
+          >
+            {columns.map((column) => (
+              <Column
+                key={column.id}
+                column={column}
+                cards={filteredCardsByColumn[column.id] ?? []}
+                itemLabel={itemLabel}
+                newItemLabel={newItemLabel}
+                onCardClick={setSelectedCardId}
+                onAddCard={(name) => addCard(column.id, name)}
+              />
+            ))}
+          </div>
+
+          <button
+            type="button"
+            aria-label="Ver columnas siguientes"
+            tabIndex={canScrollRight ? 0 : -1}
+            onMouseEnter={() => startAutoScroll("right")}
+            onMouseLeave={stopAutoScroll}
+            onClick={() =>
+              scrollRef.current?.scrollBy({ left: ARROW_SCROLL_STEP, behavior: "smooth" })
+            }
+            className={`absolute right-0 top-1/2 z-10 flex h-20 w-11 -translate-y-1/2 items-center justify-center rounded-l-full border border-r-0 border-neutral-700 bg-neutral-900/80 text-4xl text-neutral-200 shadow-lg backdrop-blur transition-opacity duration-200 hover:border-deinsa-orange hover:text-deinsa-orange ${
+              canScrollRight ? "opacity-100" : "pointer-events-none opacity-0"
+            }`}
+          >
+            ›
+          </button>
+        </div>
+      )}
 
       {selectedCard && (
         <CardModal
