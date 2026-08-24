@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-export function middleware(req: NextRequest) {
+// ¡AQUÍ ESTÁ EL CAMBIO CLAVE! Ahora la función se llama "proxy"
+export function proxy(req: NextRequest) {
   // 1. Obtenemos el valor guardado en la cookie y la contraseña actual del .env
   const authCookie = req.cookies.get('crm_auth')?.value;
   const passwordActual = process.env.CRM_PASSWORD;
@@ -13,7 +14,7 @@ export function middleware(req: NextRequest) {
   const isLoginPage = url.pathname === '/login';
   const isApiRoute = url.pathname.startsWith('/api/');
 
-  // 3. Si NO tiene la clave correcta (o si los jefes la acaban de cambiar) y quiere entrar al CRM, lo rebotamos al login
+  // 3. Si NO tiene la clave correcta y quiere entrar al CRM, lo rebotamos al login
   if (!tieneAccesoValido && !isLoginPage && !isApiRoute) {
     url.pathname = '/login';
     return NextResponse.redirect(url);
