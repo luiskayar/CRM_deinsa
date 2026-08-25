@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { adminDb } from "@/lib/firebase-admin"; 
+import { adminDb } from "@/lib/firebase-admin";
 import { BOARD_COLLECTION } from "@/lib/constants";
 
 // 1. Maneja las lecturas (GET)
@@ -27,7 +27,7 @@ export async function GET(req: Request) {
   }
 }
 
-// 2. Maneja las escrituras (POST, PUT, DELETE)
+// 2. Maneja las escrituras (POST, PUT, DELETE, BULKADD)
 export async function POST(req: Request) {
   try {
     const body = await req.json();
