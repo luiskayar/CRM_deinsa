@@ -1,32 +1,48 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { jwtVerify } from 'jose';
 
-// ¡AQUÍ ESTÁ EL CAMBIO CLAVE! Ahora la función se llama "proxy"
-export function proxy(req: NextRequest) {
-  // 1. Obtenemos el valor guardado en la cookie y la contraseña actual del .env
+export async function proxy(req: NextRequest) {
   const authCookie = req.cookies.get('crm_auth')?.value;
-  const passwordActual = process.env.CRM_PASSWORD;
-
-  // 2. Verificamos si la cookie tiene EXACTAMENTE la misma contraseña del .env actual
-  const tieneAccesoValido = authCookie === passwordActual;
+  const passwordActual = process.env.CRM_PASSWORD || "";
   
   const url = req.nextUrl.clone();
-  const isLoginPage = url.pathname === '/login';
-  const isApiRoute = url.pathname.startsWith('/api/');
 
-  // 3. Si NO tiene la clave correcta y quiere entrar al CRM, lo rebotamos al login
-  if (!tieneAccesoValido && !isLoginPage && !isApiRoute) {
+  // 🔥 LISTA BLANCA: Estas son las ÚNICAS rutas del sistema que no piden contraseña
+  const rutasPublicas = ['/login', '/api/login', '/api/logout'];
+  const isPublicRoute = rutasPublicas.includes(url.pathname);
+
+  let tieneAccesoValido = false;
+
+  // 1. Verificamos la firma del token
+  if (authCookie) {
+    try {
+      const secret = new TextEncoder().encode(passwordActual);
+      await jwtVerify(authCookie, secret);
+      tieneAccesoValido = true;
+    } catch (error) {
+      tieneAccesoValido = false;
+    }
+  }
+
+  // 2. 🔥 EL ESCUDO (DENEGAR POR DEFECTO): Si NO tiene acceso y la ruta NO está en la lista blanca
+  if (!tieneAccesoValido && !isPublicRoute) {
+    // Si era un intento de hackear una API, devolvemos un "Acceso Denegado" puro
+    if (url.pathname.startsWith('/api/')) {
+      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+    }
+    // Si era un intento de entrar a una pantalla, lo mandamos a que se loguee
     url.pathname = '/login';
     return NextResponse.redirect(url);
   }
 
-  // 4. Si YA tiene la clave correcta e intenta ir a la pantalla de login, lo mandamos al CRM
-  if (tieneAccesoValido && isLoginPage) {
+  // 3. Si YA tiene acceso e intenta ir al login, lo mandamos de regreso al trabajo
+  if (tieneAccesoValido && url.pathname === '/login') {
     url.pathname = '/negociaciones';
     return NextResponse.redirect(url);
   }
 
-  // 5. Si todo está en orden, lo dejamos pasar
+  // 4. Si todo está en orden, lo dejamos pasar
   return NextResponse.next();
 }
 
