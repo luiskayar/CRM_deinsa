@@ -20,7 +20,7 @@ export async function proxy(req: NextRequest) {
       const secret = new TextEncoder().encode(passwordActual);
       await jwtVerify(authCookie, secret);
       tieneAccesoValido = true;
-    } catch (error) {
+    } catch (_error) { // 🔥 Aquí está la corrección: _error
       tieneAccesoValido = false;
     }
   }

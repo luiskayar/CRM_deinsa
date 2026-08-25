@@ -15,7 +15,7 @@ export async function GET(req: Request) {
     const collectionName = BOARD_COLLECTION[type as keyof typeof BOARD_COLLECTION];
     const snapshot = await adminDb.collection(collectionName).orderBy("createdAt", "asc").get();
 
-    // 🔥 AQUÍ ESTÁ LA CORRECCIÓN DE TYPESCRIPT (doc: any)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const cards = snapshot.docs.map((doc: any) => ({
       id: doc.id,
       ...doc.data(),
@@ -28,7 +28,7 @@ export async function GET(req: Request) {
   }
 }
 
-// 2. Maneja las escrituras (POST, PUT, DELETE)
+// 2. Maneja las escrituras (POST, PUT, DELETE, BULKADD)
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -40,6 +40,28 @@ export async function POST(req: Request) {
 
     const collectionName = BOARD_COLLECTION[type as keyof typeof BOARD_COLLECTION];
     const collectionRef = adminDb.collection(collectionName);
+
+    // 🔥 CARGA MASIVA (Requerimiento de Brenda para importaciones)
+    if (action === "bulkAdd") {
+      if (!Array.isArray(payload)) {
+        return NextResponse.json({ error: "El payload debe ser un array para bulkAdd" }, { status: 400 });
+      }
+
+      const batch = adminDb.batch();
+      
+      for (const item of payload) {
+        const newDocRef = collectionRef.doc();
+        batch.set(newDocRef, {
+          name: item.name || "",
+          columnId: item.columnId || "",
+          createdAt: item.createdAt || new Date().toISOString(),
+          comments: item.comments || [],
+        });
+      }
+
+      await batch.commit();
+      return NextResponse.json({ success: true, count: payload.length });
+    }
 
     if (action === "add") {
       await collectionRef.add(payload);
