@@ -1,6 +1,4 @@
-import { collection, doc, writeBatch } from "firebase/firestore";
-import { db } from "./firebase";
-import { BOARD_COLLECTION, BOARD_COLUMNS, BOARD_LABELS, EXPORT_SHEET_NAME } from "./constants";
+import { BOARD_COLUMNS, BOARD_LABELS, EXPORT_SHEET_NAME } from "./constants";
 import { normalizeText } from "./search";
 import { BoardType, CardItem } from "./types";
 
@@ -72,6 +70,29 @@ function chunk<T>(items: T[], size: number): T[][] {
     chunks.push(items.slice(i, i + size));
   }
   return chunks;
+}
+
+// Carga masiva a través de /api/board (Admin SDK del lado servidor), ya que
+// Firestore ya no acepta escrituras directas desde el cliente. Se trocea en
+// grupos de 500 porque ese es el máximo de operaciones por batch de Firestore.
+async function bulkAddCards(
+  boardType: BoardType,
+  items: { name: string; columnId: string }[]
+) {
+  for (const group of chunk(items, 500)) {
+    const res = await fetch("/api/board", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: boardType,
+        action: "bulkAdd",
+        payload: group,
+      }),
+    });
+    if (!res.ok) {
+      throw new Error("Error al realizar la importación masiva");
+    }
+  }
 }
 
 export async function downloadImportTemplate() {
@@ -173,18 +194,8 @@ export async function importWorkbookFile(
       rows.push({ row: rowNumber, name, status: "importado" });
     });
 
-    for (const group of chunk(toCreate, 450)) {
-      const batch = writeBatch(db);
-      for (const item of group) {
-        const ref = doc(collection(db, BOARD_COLLECTION[boardType]));
-        batch.set(ref, {
-          name: item.name,
-          columnId: item.columnId,
-          createdAt: new Date().toISOString(),
-          comments: [],
-        });
-      }
-      await batch.commit();
+    if (toCreate.length > 0) {
+      await bulkAddCards(boardType, toCreate);
     }
 
     outcomes.push({ sheetName: worksheet.name, boardType, rows });
