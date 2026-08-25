@@ -17,11 +17,13 @@ import {
   EXPORT_SHEET_NAME,
 } from "@/lib/constants";
 import { cardsToExportRows, EXPORT_HEADERS, exportRowsToPdf, exportSheetsToExcel } from "@/lib/export";
+import { downloadImportTemplate, importWorkbookFile, ImportSheetOutcome } from "@/lib/import";
 import { normalizeText } from "@/lib/search";
 import { BoardType, CardItem } from "@/lib/types";
 import { fetchBoardCards, useBoard } from "@/hooks/useBoard";
 import { Column } from "./Column";
 import { CardModal } from "./CardModal";
+import { ImportResultModal } from "./ImportResultModal";
 import { SearchBar } from "./SearchBar";
 
 const OTHER_BOARD_TYPE: Record<BoardType, BoardType> = {
@@ -112,6 +114,35 @@ export function Board({ boardType }: { boardType: BoardType }) {
       setExportError("No se pudo generar el Excel.");
     } finally {
       setExporting(null);
+    }
+  }
+
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importResult, setImportResult] = useState<ImportSheetOutcome[] | null>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    setImportError(null);
+    setImporting(true);
+    try {
+      const otherBoardType = OTHER_BOARD_TYPE[boardType];
+      const otherCards = await fetchBoardCards(otherBoardType);
+      const existingCardsByBoard = {
+        [boardType]: cards,
+        [otherBoardType]: otherCards,
+      } as Record<BoardType, CardItem[]>;
+      const outcomes = await importWorkbookFile(file, existingCardsByBoard);
+      setImportResult(outcomes);
+    } catch (err) {
+      console.error(err);
+      setImportError("No se pudo leer el archivo. Verifica que sea un Excel válido.");
+    } finally {
+      setImporting(false);
     }
   }
 
@@ -216,12 +247,40 @@ export function Board({ boardType }: { boardType: BoardType }) {
           >
             {exporting === "excel" ? "Generando..." : "Exportar Excel"}
           </button>
+          <button
+            type="button"
+            onClick={() => downloadImportTemplate()}
+            className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-neutral-300 hover:border-deinsa-orange hover:text-deinsa-orange"
+          >
+            Plantilla de importación
+          </button>
+          <button
+            type="button"
+            onClick={() => importInputRef.current?.click()}
+            disabled={importing}
+            className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-neutral-300 hover:border-deinsa-orange hover:text-deinsa-orange disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {importing ? "Importando..." : "Importar Excel"}
+          </button>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".xlsx"
+            onChange={handleImportFile}
+            className="hidden"
+          />
         </div>
       </div>
 
       {exportError && (
         <div className="mx-6 mt-2 shrink-0 rounded-md border border-red-900 bg-red-950/40 px-3 py-2 text-xs text-red-300">
           {exportError}
+        </div>
+      )}
+
+      {importError && (
+        <div className="mx-6 mt-2 shrink-0 rounded-md border border-red-900 bg-red-950/40 px-3 py-2 text-xs text-red-300">
+          {importError}
         </div>
       )}
 
@@ -291,6 +350,10 @@ export function Board({ boardType }: { boardType: BoardType }) {
           onSave={updateCard}
           onDelete={deleteCard}
         />
+      )}
+
+      {importResult && (
+        <ImportResultModal outcomes={importResult} onClose={() => setImportResult(null)} />
       )}
     </DndContext>
   );
