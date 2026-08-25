@@ -17,7 +17,7 @@ import {
   EXPORT_SHEET_NAME,
 } from "@/lib/constants";
 import { cardsToExportRows, EXPORT_HEADERS, exportRowsToPdf, exportSheetsToExcel } from "@/lib/export";
-asimport { downloadImportTemplate, importWorkbookFile, ImportSheetOutcome } from "@/lib/import";
+import { downloadImportTemplate, importWorkbookFile, ImportSheetOutcome } from "@/lib/import";
 import { normalizeText } from "@/lib/search";
 import { BoardType, CardItem } from "@/lib/types";
 import { fetchBoardCards, useBoard } from "@/hooks/useBoard";
