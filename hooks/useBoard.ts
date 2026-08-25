@@ -24,18 +24,21 @@ export function useBoard(boardType: BoardType) {
       const data = await fetchBoardCards(boardType);
       setCards(data);
       setError(null);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(err.message);
+      setError(err instanceof Error ? err.message : "Error desconocido");
     } finally {
       setLoading(false);
     }
   }, [boardType]);
 
-  // Simulamos el tiempo real consultando la API cada 10 segundos
-  // Así evitamos tener Firebase abierto en el cliente
+  // Simulamos el tiempo real consultando la API de forma segura
   useEffect(() => {
-    loadCards();
+    const init = async () => {
+      await loadCards();
+    };
+    init();
+    
     const interval = setInterval(loadCards, 10000);
     return () => clearInterval(interval);
   }, [loadCards]);
@@ -49,8 +52,8 @@ export function useBoard(boardType: BoardType) {
     return map;
   }, [cards]);
 
-  // Función interna para hablar con la API de modificaciones
-  async function apiRequest(action: string, id?: string, payload?: any) {
+  // Función interna para hablar con la API (reemplazamos any por unknown)
+  async function apiRequest(action: string, id?: string, payload?: unknown) {
     await fetch("/api/board", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -60,11 +63,10 @@ export function useBoard(boardType: BoardType) {
   }
 
   async function moveCard(cardId: string, newColumnId: string) {
-    // UI Optimista: Movemos la tarjeta en pantalla al instante para que no haya lag
+    // UI Optimista
     setCards((prev) =>
       prev.map((card) => (card.id === cardId ? { ...card, columnId: newColumnId } : card))
     );
-    // Luego le avisamos a la API en segundo plano
     await apiRequest("move", cardId, { columnId: newColumnId });
   }
 
@@ -93,7 +95,6 @@ export function useBoard(boardType: BoardType) {
   }
 
   async function deleteCard(cardId: string) {
-    // UI Optimista: Desaparecemos la tarjeta al instante
     setCards((prev) => prev.filter((card) => card.id !== cardId));
     await apiRequest("delete", cardId);
   }
