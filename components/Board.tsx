@@ -56,7 +56,17 @@ export function Board({ boardType }: { boardType: BoardType }) {
   const filteredCards = useMemo(() => {
     if (!isSearching) return cards;
     const query = normalizeText(search.trim());
-    return cards.filter((card) => normalizeText(card.name).includes(query));
+    return cards.filter((card) => {
+      const haystack = [
+        card.name,
+        card.contact?.name,
+        card.contact?.email,
+        card.contact?.phone,
+      ]
+        .filter(Boolean)
+        .join(" ");
+      return normalizeText(haystack).includes(query);
+    });
   }, [cards, isSearching, search]);
 
   const filteredCardsByColumn = useMemo(() => {
@@ -228,7 +238,7 @@ export function Board({ boardType }: { boardType: BoardType }) {
         <SearchBar
           value={search}
           onChange={setSearch}
-          placeholder={`Buscar ${itemLabel}...`}
+          placeholder="Buscar por nombre, contacto o correo..."
         />
         <div className="flex items-center gap-2">
           <button

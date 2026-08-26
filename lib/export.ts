@@ -1,6 +1,17 @@
-import { CardItem, Column } from "./types";
+import { CardItem, Column, Comment, Contact } from "./types";
 
-export const EXPORT_HEADERS = ["Nombre", "Etapa", "Fecha de creación", "Comentarios"];
+export const EXPORT_HEADERS = [
+  "Nombre",
+  "Etapa",
+  "Contacto",
+  "Puesto",
+  "Correo",
+  "Teléfono",
+  "Fecha de creación",
+  "Comentarios",
+];
+
+const COMMENTS_COLUMN_INDEX = EXPORT_HEADERS.length - 1;
 
 function formatExportDate(iso: string) {
   return new Date(iso).toLocaleDateString("es", {
@@ -8,6 +19,18 @@ function formatExportDate(iso: string) {
     month: "short",
     year: "numeric",
   });
+}
+
+function formatContactPhone(contact?: Contact | null) {
+  if (!contact?.phone) return "";
+  return contact.countryCode ? `${contact.countryCode} ${contact.phone}` : contact.phone;
+}
+
+function formatComments(comments: Comment[]) {
+  if (comments.length === 0) return "Sin comentarios";
+  return comments
+    .map((comment) => `[${formatExportDate(comment.createdAt)}] ${comment.text}`)
+    .join("\n");
 }
 
 export function cardsToExportRows(
@@ -18,8 +41,12 @@ export function cardsToExportRows(
   return cards.map((card) => [
     card.name,
     stageLabel.get(card.columnId) ?? card.columnId,
+    card.contact?.name ?? "",
+    card.contact?.role ?? "",
+    card.contact?.email ?? "",
+    formatContactPhone(card.contact),
     formatExportDate(card.createdAt),
-    card.comments.length,
+    formatComments(card.comments),
   ]);
 }
 
@@ -50,7 +77,7 @@ export async function exportRowsToPdf({
     import("jspdf-autotable"),
   ]);
 
-  const doc = new jsPDF();
+  const doc = new jsPDF({ orientation: "landscape" });
   doc.setFontSize(14);
   doc.text(title, 14, 16);
   doc.setFontSize(9);
@@ -61,9 +88,12 @@ export async function exportRowsToPdf({
     startY: 28,
     head: [headers],
     body: rows,
-    styles: { fontSize: 9, cellPadding: 3 },
+    styles: { fontSize: 8, cellPadding: 3, overflow: "linebreak", valign: "top" },
     headStyles: { fillColor: [38, 38, 38], textColor: 255 },
     alternateRowStyles: { fillColor: [245, 245, 245] },
+    columnStyles: {
+      [COMMENTS_COLUMN_INDEX]: { cellWidth: 90 },
+    },
   });
 
   doc.save(filename);
@@ -83,9 +113,15 @@ export async function exportSheetsToExcel({
 
   for (const sheet of sheets) {
     const worksheet = workbook.addWorksheet(sheet.name);
-    worksheet.columns = sheet.headers.map((header) => ({ header, width: 24 }));
+    worksheet.columns = sheet.headers.map((header, index) => ({
+      header,
+      width: index === COMMENTS_COLUMN_INDEX ? 50 : 22,
+    }));
     worksheet.addRows(sheet.rows);
     worksheet.getRow(1).font = { bold: true };
+
+    const commentsColumn = worksheet.getColumn(COMMENTS_COLUMN_INDEX + 1);
+    commentsColumn.alignment = { wrapText: true, vertical: "top" };
   }
 
   const buffer = await workbook.xlsx.writeBuffer();
