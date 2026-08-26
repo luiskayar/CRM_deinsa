@@ -6,12 +6,21 @@ export type Comment = {
   createdAt: string;
 };
 
+export type Contact = {
+  name: string;
+  role: string;
+  email: string;
+  countryCode: string;
+  phone: string;
+};
+
 export type CardItem = {
   id: string;
   name: string;
   columnId: string;
   createdAt: string;
   comments: Comment[];
+  contact?: Contact | null;
 };
 
 export type Column = {

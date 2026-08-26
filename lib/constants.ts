@@ -51,6 +51,17 @@ export const EXPORT_SHEET_NAME: Record<BoardType, string> = {
   alianzas: "Aliados",
 };
 
+// Países usados por Deinsa en negociaciones/alianzas (RF-05), con su
+// prefijo internacional para autocompletar el teléfono del contacto.
+export const COUNTRY_CODES: { country: string; code: string }[] = [
+  { country: "Costa Rica", code: "+506" },
+  { country: "Panamá", code: "+507" },
+  { country: "México", code: "+52" },
+  { country: "Colombia", code: "+57" },
+  { country: "Ecuador", code: "+593" },
+  { country: "República Dominicana", code: "+1" },
+];
+
 export type ColumnAccent = "neutral" | "blue" | "orange" | "amber" | "green" | "red";
 
 // Misma columna (mismo id) usa el mismo color en ambos tableros.

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { BoardType, CardItem, Comment } from "@/lib/types";
+import { BoardType, CardItem, Comment, Contact } from "@/lib/types";
 
 function createCommentId() {
   return `comment-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -81,17 +81,31 @@ export function useBoard(boardType: BoardType) {
 
   async function updateCard(
     cardId: string,
-    updates: { name: string; comments: Comment[]; newComments: string[] }
+    updates: {
+      name?: string;
+      comments?: Comment[];
+      newComments?: string[];
+      contact?: Contact | null;
+    }
   ) {
-    const addedComments: Comment[] = updates.newComments.map((text) => ({
-      id: createCommentId(),
-      text,
-      createdAt: new Date().toISOString(),
-    }));
-    await apiRequest("update", cardId, {
-      name: updates.name,
-      comments: [...updates.comments, ...addedComments],
-    });
+    const payload: Record<string, unknown> = {};
+
+    if (updates.name !== undefined) {
+      payload.name = updates.name;
+    }
+    if (updates.comments !== undefined) {
+      const addedComments: Comment[] = (updates.newComments ?? []).map((text) => ({
+        id: createCommentId(),
+        text,
+        createdAt: new Date().toISOString(),
+      }));
+      payload.comments = [...updates.comments, ...addedComments];
+    }
+    if (updates.contact !== undefined) {
+      payload.contact = updates.contact;
+    }
+
+    await apiRequest("update", cardId, payload);
   }
 
   async function deleteCard(cardId: string) {
