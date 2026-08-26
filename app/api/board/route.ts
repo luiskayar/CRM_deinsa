@@ -1,6 +1,18 @@
 import { NextResponse } from "next/server";
+import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase-admin";
 import { BOARD_COLLECTION } from "@/lib/constants";
+
+// Los valores null llegan desde el cliente cuando se quiere borrar un campo
+// (p. ej. eliminar el contacto de RF-05); el Admin SDK solo borra campos de
+// verdad con el sentinel FieldValue.delete() en updates.
+function toFirestoreUpdate(payload: Record<string, unknown>) {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(payload)) {
+    result[key] = value === null ? FieldValue.delete() : value;
+  }
+  return result;
+}
 
 // 1. Maneja las lecturas (GET)
 export async function GET(req: Request) {
@@ -66,7 +78,7 @@ export async function POST(req: Request) {
     if (action === "add") {
       await collectionRef.add(payload);
     } else if (action === "move" || action === "update") {
-      await collectionRef.doc(id).update(payload);
+      await collectionRef.doc(id).update(toFirestoreUpdate(payload));
     } else if (action === "delete") {
       await collectionRef.doc(id).delete();
     } else {
