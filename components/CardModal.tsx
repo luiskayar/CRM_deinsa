@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { CardItem, Comment, Contact } from "@/lib/types";
-import { COUNTRY_CODES } from "@/lib/constants";
+import { CardItem, Comment, Contact, NegotiationStatus } from "@/lib/types";
+import { COUNTRY_CODES, STATUS_CONFIG } from "@/lib/constants";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -35,6 +35,7 @@ export function CardModal({
       comments?: Comment[];
       newComments?: string[];
       contact?: Contact | null;
+      status?: NegotiationStatus | null;
     }
   ) => void;
   onDelete: (cardId: string) => void;
@@ -44,6 +45,15 @@ export function CardModal({
   const [draftComments, setDraftComments] = useState<string[]>([]);
   const [commentText, setCommentText] = useState("");
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  const [status, setStatus] = useState<NegotiationStatus | null>(card.status ?? null);
+
+  async function handleStatusChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    const value = e.target.value as NegotiationStatus | "";
+    const newStatus = value === "" ? null : value;
+    setStatus(newStatus);
+    await onSave(card.id, { status: newStatus });
+  }
 
   const [contact, setContact] = useState<Contact | null>(card.contact ?? null);
   const [editingContact, setEditingContact] = useState(!card.contact);
@@ -158,6 +168,23 @@ export function CardModal({
             <p className="mt-1.5 text-xs text-neutral-500">
               Creada el {formatDateTime(card.createdAt)}
             </p>
+            <div className="mt-2">
+              <label className="mb-1 block text-xs uppercase tracking-wide text-neutral-500">
+                Estado
+              </label>
+              <select
+                value={status ?? ""}
+                onChange={handleStatusChange}
+                className="rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-sm text-neutral-100 outline-none focus:border-deinsa-orange"
+              >
+                <option value="">Sin estado</option>
+                {(Object.keys(STATUS_CONFIG) as NegotiationStatus[]).map((key) => (
+                  <option key={key} value={key}>
+                    {STATUS_CONFIG[key].label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
           <button
             onClick={onClose}

@@ -14,6 +14,8 @@ export type Contact = {
   phone: string;
 };
 
+export type NegotiationStatus = "pausada" | "activa" | "muyActiva";
+
 export type CardItem = {
   id: string;
   name: string;
@@ -21,6 +23,7 @@ export type CardItem = {
   createdAt: string;
   comments: Comment[];
   contact?: Contact | null;
+  status?: NegotiationStatus;
 };
 
 export type Column = {

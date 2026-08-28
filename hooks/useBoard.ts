@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { BoardType, CardItem, Comment, Contact } from "@/lib/types";
+import { BoardType, CardItem, Comment, Contact, NegotiationStatus } from "@/lib/types";
 
 function createCommentId() {
   return `comment-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -86,12 +86,15 @@ export function useBoard(boardType: BoardType) {
       comments?: Comment[];
       newComments?: string[];
       contact?: Contact | null;
+      status?: NegotiationStatus | null;
     }
   ) {
     const payload: Record<string, unknown> = {};
+    const optimisticPatch: Partial<CardItem> = {};
 
     if (updates.name !== undefined) {
       payload.name = updates.name;
+      optimisticPatch.name = updates.name;
     }
     if (updates.comments !== undefined) {
       const addedComments: Comment[] = (updates.newComments ?? []).map((text) => ({
@@ -99,11 +102,24 @@ export function useBoard(boardType: BoardType) {
         text,
         createdAt: new Date().toISOString(),
       }));
-      payload.comments = [...updates.comments, ...addedComments];
+      const mergedComments = [...updates.comments, ...addedComments];
+      payload.comments = mergedComments;
+      optimisticPatch.comments = mergedComments;
     }
     if (updates.contact !== undefined) {
       payload.contact = updates.contact;
+      optimisticPatch.contact = updates.contact;
     }
+    if (updates.status !== undefined) {
+      payload.status = updates.status;
+      optimisticPatch.status = updates.status ?? undefined;
+    }
+
+    // UI Optimista: igual que moveCard, no esperamos al fetch (ni al
+    // siguiente ciclo de polling) para reflejar el cambio en pantalla.
+    setCards((prev) =>
+      prev.map((card) => (card.id === cardId ? { ...card, ...optimisticPatch } : card))
+    );
 
     await apiRequest("update", cardId, payload);
   }

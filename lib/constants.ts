@@ -1,4 +1,4 @@
-import { BoardType, Column } from "./types";
+import { BoardType, Column, NegotiationStatus } from "./types";
 
 export const BOARD_COLUMNS: Record<BoardType, Column[]> = {
   negociaciones: [
@@ -61,6 +61,13 @@ export const COUNTRY_CODES: { country: string; code: string }[] = [
   { country: "Ecuador", code: "+593" },
   { country: "República Dominicana", code: "+1" },
 ];
+
+// Indicador de estado de la negociación (RF-06, "mini bandera").
+export const STATUS_CONFIG: Record<NegotiationStatus, { label: string; color: string }> = {
+  pausada: { label: "Pausada", color: "#94a3b8" },
+  activa: { label: "Activa", color: "#22c55e" },
+  muyActiva: { label: "Muy activa", color: "#3b82f6" },
+};
 
 export type ColumnAccent = "neutral" | "blue" | "orange" | "amber" | "green" | "red";
 

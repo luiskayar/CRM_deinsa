@@ -2,6 +2,7 @@
 
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
+import { STATUS_CONFIG } from "@/lib/constants";
 import { CardItem } from "@/lib/types";
 
 function formatDate(iso: string) {
@@ -37,7 +38,16 @@ export function Card({
         isDragging ? "z-10 opacity-50" : ""
       }`}
     >
-      <p className="text-sm font-medium text-neutral-100">{card.name}</p>
+      <div className="flex items-center gap-2">
+        {card.status && (
+          <span
+            className="h-2 w-2 shrink-0 rounded-full"
+            style={{ backgroundColor: STATUS_CONFIG[card.status].color }}
+            title={STATUS_CONFIG[card.status].label}
+          />
+        )}
+        <p className="text-sm font-medium text-neutral-100">{card.name}</p>
+      </div>
       <div className="mt-2 flex items-center justify-between text-xs text-neutral-500">
         <span>{formatDate(card.createdAt)}</span>
         <span className="rounded-full bg-neutral-700 px-2 py-0.5 text-neutral-300">
