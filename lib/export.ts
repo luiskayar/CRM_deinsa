@@ -1,3 +1,4 @@
+import { getCardContacts } from "./contact";
 import { CardItem, Column, Comment, Contact } from "./types";
 
 export const EXPORT_HEADERS = [
@@ -11,6 +12,8 @@ export const EXPORT_HEADERS = [
   "Comentarios",
 ];
 
+const CONTACT_NAME_INDEX = 2;
+const CONTACT_EMAIL_INDEX = 4;
 const COMMENTS_COLUMN_INDEX = EXPORT_HEADERS.length - 1;
 
 function formatExportDate(iso: string) {
@@ -21,9 +24,19 @@ function formatExportDate(iso: string) {
   });
 }
 
-function formatContactPhone(contact?: Contact | null) {
-  if (!contact?.phone) return "";
+function formatContactPhone(contact: Contact) {
+  if (!contact.phone) return "";
   return contact.countryCode ? `${contact.countryCode} ${contact.phone}` : contact.phone;
+}
+
+// Une el mismo campo de todos los contactos de la tarjeta en una sola celda,
+// una línea por contacto (se combina con "wrapText"/"linebreak" al exportar).
+function formatContactsField(contacts: Contact[], pick: (contact: Contact) => string) {
+  return contacts
+    .map(pick)
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .join("\n");
 }
 
 function formatComments(comments: Comment[]) {
@@ -38,16 +51,19 @@ export function cardsToExportRows(
   columns: Column[]
 ): (string | number)[][] {
   const stageLabel = new Map(columns.map((column) => [column.id, column.label]));
-  return cards.map((card) => [
-    card.name,
-    stageLabel.get(card.columnId) ?? card.columnId,
-    card.contact?.name ?? "",
-    card.contact?.role ?? "",
-    card.contact?.email ?? "",
-    formatContactPhone(card.contact),
-    formatExportDate(card.createdAt),
-    formatComments(card.comments),
-  ]);
+  return cards.map((card) => {
+    const contacts = getCardContacts(card);
+    return [
+      card.name,
+      stageLabel.get(card.columnId) ?? card.columnId,
+      formatContactsField(contacts, (c) => c.name),
+      formatContactsField(contacts, (c) => c.role),
+      formatContactsField(contacts, (c) => c.email),
+      formatContactsField(contacts, formatContactPhone),
+      formatExportDate(card.createdAt),
+      formatComments(card.comments),
+    ];
+  });
 }
 
 function downloadBlob(blob: Blob, filename: string) {
@@ -92,12 +108,20 @@ export async function exportRowsToPdf({
     headStyles: { fillColor: [38, 38, 38], textColor: 255 },
     alternateRowStyles: { fillColor: [245, 245, 245] },
     columnStyles: {
-      [COMMENTS_COLUMN_INDEX]: { cellWidth: 90 },
+      [CONTACT_NAME_INDEX]: { cellWidth: 45 },
+      [CONTACT_EMAIL_INDEX]: { cellWidth: 50 },
+      [COMMENTS_COLUMN_INDEX]: { cellWidth: 80 },
     },
   });
 
   doc.save(filename);
 }
+
+const EXCEL_COLUMN_WIDTHS: Record<number, number> = {
+  [CONTACT_NAME_INDEX]: 28,
+  [CONTACT_EMAIL_INDEX]: 30,
+  [COMMENTS_COLUMN_INDEX]: 50,
+};
 
 export async function exportSheetsToExcel({
   sheets,
@@ -115,13 +139,13 @@ export async function exportSheetsToExcel({
     const worksheet = workbook.addWorksheet(sheet.name);
     worksheet.columns = sheet.headers.map((header, index) => ({
       header,
-      width: index === COMMENTS_COLUMN_INDEX ? 50 : 22,
+      width: EXCEL_COLUMN_WIDTHS[index] ?? 22,
     }));
     worksheet.addRows(sheet.rows);
     worksheet.getRow(1).font = { bold: true };
-
-    const commentsColumn = worksheet.getColumn(COMMENTS_COLUMN_INDEX + 1);
-    commentsColumn.alignment = { wrapText: true, vertical: "top" };
+    worksheet.columns.forEach((column) => {
+      column.alignment = { wrapText: true, vertical: "top" };
+    });
   }
 
   const buffer = await workbook.xlsx.writeBuffer();
