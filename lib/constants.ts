@@ -4,7 +4,6 @@ import { BoardType, Column, NegotiationStatus } from "./types";
 export const BOARD_COLUMNS: Record<BoardType, Column[]> = {
   negociaciones: [
     { id: "identificacion", label: "Identificación" },
-    { id: "importaciones", label: "Importaciones Excel" }, // 🔥 Ahora es la segunda columna
     { id: "primeros_contactos", label: "Primeros contactos" },
     { id: "reunion_agendada", label: "Reunión agendada" },
     { id: "seguimiento", label: "Seguimiento" },
@@ -13,7 +12,6 @@ export const BOARD_COLUMNS: Record<BoardType, Column[]> = {
   ],
   alianzas: [
     { id: "identificacion", label: "Identificación" },
-    { id: "importaciones", label: "Importaciones Excel" }, // 🔥 Ahora es la segunda columna
     { id: "reunion_agendada", label: "Reunión agendada" },
     { id: "seguimiento", label: "Seguimiento" },
     { id: "aliados", label: "Aliados" },
@@ -80,12 +78,10 @@ export const STATUS_CONFIG: Record<NegotiationStatus, { label: string; color: st
   muyActiva: { label: "Muy activa", color: "#3b82f6" },
 };
 
-// 🔥 Agregamos "excel" como un tipo válido de color
-export type ColumnAccent = "neutral" | "blue" | "orange" | "amber" | "green" | "red" | "excel";
+export type ColumnAccent = "neutral" | "blue" | "orange" | "amber" | "green" | "red";
 
 // Misma columna (mismo id) usa el mismo color en ambos tableros.
 export const COLUMN_ACCENT: Record<string, ColumnAccent> = {
-  importaciones: "excel", 
   identificacion: "neutral",
   primeros_contactos: "blue",
   reunion_agendada: "orange",
@@ -128,10 +124,5 @@ export const COLUMN_ACCENT_CLASSES: Record<
     bar: "bg-red-500",
     badgeBg: "bg-red-500/15",
     badgeText: "text-red-400",
-  },
-  excel: {
-    bar: "bg-[#107C41]",
-    badgeBg: "bg-green-950/50",
-    badgeText: "text-green-400",
   },
 };
