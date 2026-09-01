@@ -67,6 +67,9 @@ export async function POST(req: Request) {
           columnId: item.columnId || "",
           createdAt: item.createdAt || new Date().toISOString(),
           comments: item.comments || [],
+          // 🔥 AHORA SÍ GUARDAMOS EL CONTACTO Y ESTADO AL IMPORTAR MASIVAMENTE
+          contact: item.contact || null,
+          status: item.status || null,
         });
       }
 

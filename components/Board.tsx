@@ -137,13 +137,14 @@ export function Board({ boardType }: { boardType: BoardType }) {
     setImportError(null);
     setImporting(true);
     try {
-      const otherBoardType = OTHER_BOARD_TYPE[boardType];
-      const otherCards = await fetchBoardCards(otherBoardType);
+      // Ya no necesitamos traer las cartas del otro tablero
+      // porque solo vamos a importar al tablero actual (boardType)
       const existingCardsByBoard = {
         [boardType]: cards,
-        [otherBoardType]: otherCards,
       } as Record<BoardType, CardItem[]>;
-      const outcomes = await importWorkbookFile(file, existingCardsByBoard);
+      
+      // 🔥 Le pasamos a la función `boardType` para que sepa dónde estamos
+      const outcomes = await importWorkbookFile(file, existingCardsByBoard, boardType);
       setImportResult(outcomes);
     } catch (err) {
       console.error(err);
