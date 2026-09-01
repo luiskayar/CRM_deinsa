@@ -16,6 +16,7 @@ import {
   BOARD_LABELS,
   EXPORT_SHEET_NAME,
 } from "@/lib/constants";
+import { getCardContacts } from "@/lib/contact";
 import { cardsToExportRows, EXPORT_HEADERS, exportRowsToPdf, exportSheetsToExcel } from "@/lib/export";
 import { downloadImportTemplate, importWorkbookFile, ImportSheetOutcome } from "@/lib/import";
 import { normalizeText } from "@/lib/search";
@@ -57,12 +58,8 @@ export function Board({ boardType }: { boardType: BoardType }) {
     if (!isSearching) return cards;
     const query = normalizeText(search.trim());
     return cards.filter((card) => {
-      const haystack = [
-        card.name,
-        card.contact?.name,
-        card.contact?.email,
-        card.contact?.phone,
-      ]
+      const contacts = getCardContacts(card);
+      const haystack = [card.name, ...contacts.flatMap((c) => [c.name, c.email, c.phone])]
         .filter(Boolean)
         .join(" ");
       return normalizeText(haystack).includes(query);
@@ -140,13 +137,14 @@ export function Board({ boardType }: { boardType: BoardType }) {
     setImportError(null);
     setImporting(true);
     try {
-      const otherBoardType = OTHER_BOARD_TYPE[boardType];
-      const otherCards = await fetchBoardCards(otherBoardType);
+      // Ya no necesitamos traer las cartas del otro tablero
+      // porque solo vamos a importar al tablero actual (boardType)
       const existingCardsByBoard = {
         [boardType]: cards,
-        [otherBoardType]: otherCards,
       } as Record<BoardType, CardItem[]>;
-      const outcomes = await importWorkbookFile(file, existingCardsByBoard);
+      
+      // 🔥 Le pasamos a la función `boardType` para que sepa dónde estamos
+      const outcomes = await importWorkbookFile(file, existingCardsByBoard, boardType);
       setImportResult(outcomes);
     } catch (err) {
       console.error(err);

@@ -5,7 +5,7 @@ import { ImportSheetOutcome } from "@/lib/import";
 
 const STATUS_STYLES: Record<string, string> = {
   importado: "text-green-400",
-  duplicado: "text-amber-400",
+  duplicado: "text-amber-400", // 🔥 Volvemos a color ámbar y texto 'duplicado'
   error: "text-red-400",
 };
 

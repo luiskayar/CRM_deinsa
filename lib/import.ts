@@ -1,11 +1,11 @@
-import { BOARD_COLUMNS, BOARD_LABELS, EXPORT_SHEET_NAME } from "./constants";
+import { BOARD_COLUMNS, BOARD_LABELS, EXPORT_SHEET_NAME, COUNTRY_CODES } from "./constants";
 import { normalizeText } from "./search";
 import { BoardType, CardItem } from "./types";
 
 export type ImportRowOutcome = {
   row: number;
   name: string;
-  status: "importado" | "duplicado" | "error";
+  status: "importado" | "duplicado" | "error"; 
   detail?: string;
 };
 
@@ -15,9 +15,6 @@ export type ImportSheetOutcome = {
   rows: ImportRowOutcome[];
 };
 
-// Une el nombre de hoja del archivo cargado con el tablero al que corresponde,
-// aceptando tanto el nombre usado en la exportación ("Leads"/"Aliados") como
-// el nombre del tablero en pantalla ("Negociaciones"/"Alianzas").
 function resolveBoardType(sheetName: string): BoardType | null {
   const normalized = normalizeText(sheetName.trim());
   for (const boardType of Object.keys(BOARD_LABELS) as BoardType[]) {
@@ -37,13 +34,28 @@ function resolveColumnId(boardType: BoardType, etapaRaw: string): string | null 
   return match ? match.id : null;
 }
 
+// 🔥 Se mejoró la lectura de celdas para evitar que los correos salgan como "[object Object]"
 function cellText(cell: import("exceljs").Cell): string {
   const value = cell.value;
   if (value === null || value === undefined) return "";
   if (typeof value === "object") {
-    if ("richText" in value) return value.richText.map((part) => part.text).join("");
-    if ("text" in value) return String(value.text);
-    if ("result" in value) return value.result === undefined ? "" : String(value.result);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ("hyperlink" in value) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const textVal = (value as any).text;
+      if (textVal && typeof textVal === "object" && "richText" in textVal) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return textVal.richText.map((p: any) => p.text).join("");
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return String(textVal || (value as any).hyperlink || "").trim();
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ("richText" in value) return (value as any).richText.map((part: any) => part.text).join("");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ("text" in value) return String((value as any).text).trim();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ("result" in value) return (value as any).result === undefined ? "" : String((value as any).result).trim();
     if (value instanceof Date) return value.toISOString();
   }
   return String(value).trim();
@@ -57,13 +69,8 @@ function chunk<T>(items: T[], size: number): T[][] {
   return chunks;
 }
 
-// Carga masiva a través de /api/board (Admin SDK del lado servidor), ya que
-// Firestore ya no acepta escrituras directas desde el cliente. Se trocea en
-// grupos de 500 porque ese es el máximo de operaciones por batch de Firestore.
-async function bulkAddCards(
-  boardType: BoardType,
-  items: { name: string; columnId: string }[]
-) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function bulkAddCards(boardType: BoardType, items: any[]) {
   for (const group of chunk(items, 500)) {
     const res = await fetch("/api/board", {
       method: "POST",
@@ -81,7 +88,6 @@ async function bulkAddCards(
 }
 
 export async function downloadImportTemplate() {
-  // Descarga directamente el archivo físico alojado en la carpeta public/
   const link = document.createElement("a");
   link.href = "/plantilla-importacion-deinsa-crm.xlsx";
   link.download = "plantilla-importacion-deinsa-crm.xlsx";
@@ -90,12 +96,10 @@ export async function downloadImportTemplate() {
   document.body.removeChild(link);
 }
 
-// Lee el archivo cargado, valida cada fila y crea los registros nuevos en
-// Firestore. Evita duplicados comparando el nombre (sin mayúsculas/acentos)
-// contra los registros ya existentes y contra el resto del propio archivo.
 export async function importWorkbookFile(
   file: File,
-  existingCardsByBoard: Record<BoardType, CardItem[]>
+  existingCardsByBoard: Record<BoardType, CardItem[]>,
+  currentBoardType: BoardType 
 ): Promise<ImportSheetOutcome[]> {
   const { default: ExcelJS } = await import("exceljs");
   const workbook = new ExcelJS.Workbook();
@@ -105,62 +109,104 @@ export async function importWorkbookFile(
   const outcomes: ImportSheetOutcome[] = [];
 
   for (const worksheet of workbook.worksheets) {
-    const boardType = resolveBoardType(worksheet.name);
-    if (!boardType) {
-      outcomes.push({ sheetName: worksheet.name, boardType: null, rows: [] });
-      continue;
-    }
+    const sheetBoardType = resolveBoardType(worksheet.name);
+    
+    // Solo importa la pestaña correspondiente al tablero actual
+    if (sheetBoardType !== currentBoardType) continue;
 
+    const existingCards = existingCardsByBoard[currentBoardType];
+    
+    // Validamos duplicados SOLO contra tarjetas visibles en la vista actual
+    const validColumnIds = new Set(BOARD_COLUMNS[currentBoardType].map(c => c.id));
     const seenNames = new Set(
-      existingCardsByBoard[boardType].map((card) => normalizeText(card.name))
+      existingCards
+        .filter(card => validColumnIds.has(card.columnId))
+        .map((card) => normalizeText(card.name))
     );
+    
     const rows: ImportRowOutcome[] = [];
-    const toCreate: { name: string; columnId: string }[] = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const toCreate: any[] = [];
+
+    // MAPEO DINÁMICO DE COLUMNAS
+    const headers: Record<string, number> = {};
+    worksheet.getRow(1).eachCell((cell, colNumber) => {
+      headers[normalizeText(cellText(cell))] = colNumber;
+    });
 
     worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-      if (rowNumber === 1) return; // encabezado
+      if (rowNumber === 1) return; // Saltamos encabezados
 
-      const name = cellText(row.getCell(1));
-      const etapaRaw = cellText(row.getCell(2));
-      if (!name && !etapaRaw) return; // fila vacía, se ignora sin error
+      const getVal = (keys: string[]) => {
+        for (const k of keys) {
+          if (headers[k]) return cellText(row.getCell(headers[k]));
+        }
+        return "";
+      };
 
-      if (!name) {
-        rows.push({ row: rowNumber, name: "", status: "error", detail: "Falta el nombre." });
-        return;
-      }
+      // Solo extraemos los datos que nos interesan (se omiten Industria, Sector, etc.)
+      const empresa = getVal(["empresa", "compañia"]);
+      const contactName = getVal(["nombre", "contacto"]);
+      const contactRole = getVal(["cargo", "puesto"]);
+      const email = getVal(["correo", "email"]);
+      const phone = getVal(["numero", "telefono"]);
+      const pais = getVal(["pais", "país"]);
+      const columnaExcel = getVal(["columna", "etapa"]);
+
+      const name = empresa || contactName;
+      if (!name) return;
 
       const normalizedName = normalizeText(name);
+      
       if (seenNames.has(normalizedName)) {
         rows.push({
           row: rowNumber,
           name,
           status: "duplicado",
-          detail: "Ya existe un registro con este nombre.",
+          detail: "Ya existe un registro con este nombre en este tablero.",
         });
         return;
       }
 
-      const columnId = resolveColumnId(boardType, etapaRaw);
+      const mappedCountry = COUNTRY_CODES.find(c => normalizeText(c.country) === normalizeText(pais)) || COUNTRY_CODES[0];
+      const contact = {
+        name: contactName,
+        role: contactRole,
+        email,
+        countryCode: mappedCountry.code,
+        phone
+      };
+
+      let columnId = resolveColumnId(currentBoardType, columnaExcel);
       if (!columnId) {
-        rows.push({
-          row: rowNumber,
-          name,
-          status: "error",
-          detail: `Etapa "${etapaRaw}" no reconocida.`,
-        });
-        return;
+         columnId = BOARD_COLUMNS[currentBoardType][0].id;
       }
 
       seenNames.add(normalizedName);
-      toCreate.push({ name, columnId });
+      
+      toCreate.push({
+        name,
+        columnId,
+        createdAt: new Date().toISOString(),
+        comments: [], // 🔥 Ahora se envían los comentarios vacíos
+        contact 
+      });
       rows.push({ row: rowNumber, name, status: "importado" });
     });
 
     if (toCreate.length > 0) {
-      await bulkAddCards(boardType, toCreate);
+      await bulkAddCards(currentBoardType, toCreate);
     }
 
-    outcomes.push({ sheetName: worksheet.name, boardType, rows });
+    outcomes.push({ sheetName: worksheet.name, boardType: currentBoardType, rows });
+  }
+
+  if (outcomes.length === 0) {
+     outcomes.push({ 
+       sheetName: `No se encontró pestaña para ${BOARD_LABELS[currentBoardType]}`, 
+       boardType: null, 
+       rows: [] 
+     });
   }
 
   return outcomes;
