@@ -85,7 +85,7 @@ export function useBoard(boardType: BoardType) {
       name?: string;
       comments?: Comment[];
       newComments?: string[];
-      contact?: Contact | null;
+      contacts?: Contact[];
       status?: NegotiationStatus | null;
     }
   ) {
@@ -106,9 +106,9 @@ export function useBoard(boardType: BoardType) {
       payload.comments = mergedComments;
       optimisticPatch.comments = mergedComments;
     }
-    if (updates.contact !== undefined) {
-      payload.contact = updates.contact;
-      optimisticPatch.contact = updates.contact;
+    if (updates.contacts !== undefined) {
+      payload.contacts = updates.contacts;
+      optimisticPatch.contacts = updates.contacts;
     }
     if (updates.status !== undefined) {
       payload.status = updates.status;

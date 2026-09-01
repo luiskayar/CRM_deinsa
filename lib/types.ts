@@ -22,7 +22,9 @@ export type CardItem = {
   columnId: string;
   createdAt: string;
   comments: Comment[];
+  /** @deprecated usa `contacts`; se conserva para leer tarjetas guardadas antes de RF-01b. */
   contact?: Contact | null;
+  contacts?: Contact[];
   status?: NegotiationStatus;
 };
 
