@@ -63,8 +63,23 @@ export function CardModal({
   const [contactCountryCode, setContactCountryCode] = useState(
     card.contact?.countryCode ?? COUNTRY_CODES[0].code
   );
+  // Identifica la opción seleccionada del <select> por ISO, no por prefijo:
+  const [contactCountryIso, setContactCountryIso] = useState(
+    () =>
+      COUNTRY_CODES.find((c) => c.code === card.contact?.countryCode)?.iso ??
+      COUNTRY_CODES[0].iso
+  );
   const [contactPhone, setContactPhone] = useState(card.contact?.phone ?? "");
   const [contactError, setContactError] = useState<string | null>(null);
+
+  function handleContactCountryChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    const iso = e.target.value;
+    const entry = COUNTRY_CODES.find((c) => c.iso === iso);
+    setContactCountryIso(iso);
+    if (entry) {
+      setContactCountryCode(entry.code);
+    }
+  }
 
   function handleEditContact() {
     if (contact) {
@@ -72,6 +87,10 @@ export function CardModal({
       setContactRole(contact.role);
       setContactEmail(contact.email);
       setContactCountryCode(contact.countryCode);
+      setContactCountryIso(
+        COUNTRY_CODES.find((c) => c.code === contact.countryCode)?.iso ??
+          COUNTRY_CODES[0].iso
+      );
       setContactPhone(contact.phone);
     }
     setContactError(null);
@@ -116,6 +135,7 @@ export function CardModal({
     setContactRole("");
     setContactEmail("");
     setContactCountryCode(COUNTRY_CODES[0].code);
+    setContactCountryIso(COUNTRY_CODES[0].iso);
     setContactPhone("");
     setContactError(null);
     setEditingContact(true);
@@ -255,12 +275,12 @@ export function CardModal({
               />
               <div className="flex gap-2">
                 <select
-                  value={contactCountryCode}
-                  onChange={(e) => setContactCountryCode(e.target.value)}
-                  className="rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-sm text-neutral-100 outline-none focus:border-deinsa-orange"
+                  value={contactCountryIso}
+                  onChange={handleContactCountryChange}
+                  className="w-36 min-w-0 shrink-0 rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-sm text-neutral-100 outline-none focus:border-deinsa-orange"
                 >
                   {COUNTRY_CODES.map((c) => (
-                    <option key={c.code} value={c.code}>
+                    <option key={c.iso} value={c.iso}>
                       {c.country} ({c.code})
                     </option>
                   ))}

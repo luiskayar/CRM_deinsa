@@ -1,3 +1,4 @@
+import { getCountries, getCountryCallingCode } from "libphonenumber-js";
 import { BoardType, Column, NegotiationStatus } from "./types";
 
 export const BOARD_COLUMNS: Record<BoardType, Column[]> = {
@@ -51,15 +52,23 @@ export const EXPORT_SHEET_NAME: Record<BoardType, string> = {
   alianzas: "Aliados",
 };
 
-// Países usados por Deinsa en negociaciones/alianzas (RF-05), con su
-// prefijo internacional para autocompletar el teléfono del contacto.
-export const COUNTRY_CODES: { country: string; code: string }[] = [
-  { country: "Costa Rica", code: "+506" },
-  { country: "Panamá", code: "+507" },
-  { country: "México", code: "+52" },
-  { country: "Colombia", code: "+57" },
-  { country: "Ecuador", code: "+593" },
-  { country: "República Dominicana", code: "+1" },
+// Lista completa de países con su prefijo internacional (RF-05), generada
+// desde libphonenumber-js
+const countryDisplayNames = new Intl.DisplayNames(["es"], { type: "region" });
+
+const allCountryCodes = getCountries()
+  .map((iso) => ({
+    iso,
+    country: countryDisplayNames.of(iso) ?? iso,
+    code: `+${getCountryCallingCode(iso)}`,
+  }))
+  .sort((a, b) => a.country.localeCompare(b.country, "es"));
+
+// Se conserva "iso" (único por país) además de "code": 39 países comparten
+// prefijo telefónico (p. ej. +1 lo usan 25 países de Norteamérica/Caribe)
+export const COUNTRY_CODES: { iso: string; country: string; code: string }[] = [
+  ...allCountryCodes.filter((c) => c.iso === "CR"),
+  ...allCountryCodes.filter((c) => c.iso !== "CR"),
 ];
 
 // Indicador de estado de la negociación (RF-06, "mini bandera").
