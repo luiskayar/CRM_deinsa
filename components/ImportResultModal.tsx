@@ -5,7 +5,7 @@ import { ImportSheetOutcome } from "@/lib/import";
 
 const STATUS_STYLES: Record<string, string> = {
   importado: "text-green-400",
-  duplicado: "text-amber-400",
+  actualizado: "text-blue-400", // 🔥 Color azul para diferenciar las actualizaciones
   error: "text-red-400",
 };
 
@@ -41,7 +41,7 @@ export function ImportResultModal({
         <div className="flex-1 overflow-y-auto px-5 py-4">
           {outcomes.map((sheet, i) => {
             const imported = sheet.rows.filter((r) => r.status === "importado").length;
-            const duplicated = sheet.rows.filter((r) => r.status === "duplicado").length;
+            const updated = sheet.rows.filter((r) => r.status === "actualizado").length;
             const errored = sheet.rows.filter((r) => r.status === "error").length;
             const issues = sheet.rows.filter((r) => r.status !== "importado");
 
@@ -64,9 +64,9 @@ export function ImportResultModal({
                 ) : (
                   <>
                     <p className="mt-1 text-xs text-neutral-400">
-                      <span className="text-green-400">{imported} importados</span>
+                      <span className="text-green-400">{imported} nuevos</span>
                       {" · "}
-                      <span className="text-amber-400">{duplicated} duplicados</span>
+                      <span className="text-blue-400">{updated} actualizados</span>
                       {" · "}
                       <span className="text-red-400">{errored} con error</span>
                     </p>

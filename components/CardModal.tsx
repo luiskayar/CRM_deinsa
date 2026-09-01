@@ -41,7 +41,23 @@ export function CardModal({
   onDelete: (cardId: string) => void;
 }) {
   const [name, setName] = useState(card.name);
-  const [comments, setComments] = useState<Comment[]>(card.comments);
+  
+  // SEPARAR COMENTARIOS NORMALES DEL COMENTARIO OCULTO DE SISTEMA
+  const systemCommentIndex = card.comments.findIndex(c => c.text.startsWith("__SYSTEM_INFO__"));
+  const systemComment = systemCommentIndex >= 0 ? card.comments[systemCommentIndex] : null;
+  const regularComments = card.comments.filter(c => !c.text.startsWith("__SYSTEM_INFO__"));
+
+  let initialSysInfo = { industria: "", sector: "", sitioWeb: "", linkedin: "", respuesta: "" };
+  if (systemComment) {
+    try { 
+      initialSysInfo = JSON.parse(systemComment.text.replace("__SYSTEM_INFO__", "")); 
+    } catch (e) {
+      console.error("Error parseando info del sistema", e);
+    }
+  }
+
+  const [sysInfo, setSysInfo] = useState(initialSysInfo);
+  const [comments, setComments] = useState<Comment[]>(regularComments);
   const [draftComments, setDraftComments] = useState<string[]>([]);
   const [commentText, setCommentText] = useState("");
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -63,7 +79,6 @@ export function CardModal({
   const [contactCountryCode, setContactCountryCode] = useState(
     card.contact?.countryCode ?? COUNTRY_CODES[0].code
   );
-  // Identifica la opción seleccionada del <select> por ISO, no por prefijo:
   const [contactCountryIso, setContactCountryIso] = useState(
     () =>
       COUNTRY_CODES.find((c) => c.code === card.contact?.countryCode)?.iso ??
@@ -157,7 +172,25 @@ export function CardModal({
   }
 
   function handleSave() {
-    onSave(card.id, { name: name.trim() || card.name, comments, newComments: draftComments });
+    const allComments = [...comments];
+    if (sysInfo.industria || sysInfo.sector || sysInfo.sitioWeb || sysInfo.linkedin || sysInfo.respuesta) {
+      const sysText = `__SYSTEM_INFO__${JSON.stringify(sysInfo)}`;
+      if (systemComment) {
+        allComments.push({ ...systemComment, text: sysText });
+      } else {
+        allComments.push({ 
+          id: `sys-${Date.now()}`, 
+          text: sysText, 
+          createdAt: new Date().toISOString() 
+        });
+      }
+    }
+
+    onSave(card.id, { 
+      name: name.trim() || card.name, 
+      comments: allComments, 
+      newComments: draftComments 
+    });
     onClose();
   }
 
@@ -313,6 +346,69 @@ export function CardModal({
               </div>
             </div>
           )}
+
+          {/* INFORMACIÓN GENERAL */}
+          <h3 className="mb-2 mt-5 border-t border-neutral-800 pt-4 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+            Información General
+          </h3>
+          <div className="grid grid-cols-2 gap-3 rounded-md border border-neutral-800 bg-neutral-900 p-3 text-sm">
+            <div>
+              <label className="mb-1 block text-[10px] uppercase tracking-wide text-neutral-500">
+                Industria
+              </label>
+              <input 
+                value={sysInfo.industria} 
+                onChange={e => setSysInfo({...sysInfo, industria: e.target.value})} 
+                placeholder="Ej. Tecnología" 
+                className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-neutral-200 outline-none focus:border-deinsa-orange" 
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-[10px] uppercase tracking-wide text-neutral-500">
+                Sector
+              </label>
+              <input 
+                value={sysInfo.sector} 
+                onChange={e => setSysInfo({...sysInfo, sector: e.target.value})} 
+                placeholder="Ej. Privado" 
+                className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-neutral-200 outline-none focus:border-deinsa-orange" 
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-[10px] uppercase tracking-wide text-neutral-500">
+                Sitio Web
+              </label>
+              <input 
+                value={sysInfo.sitioWeb} 
+                onChange={e => setSysInfo({...sysInfo, sitioWeb: e.target.value})} 
+                placeholder="https://" 
+                className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-neutral-200 outline-none focus:border-deinsa-orange" 
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-[10px] uppercase tracking-wide text-neutral-500">
+                LinkedIn
+              </label>
+              <input 
+                value={sysInfo.linkedin} 
+                onChange={e => setSysInfo({...sysInfo, linkedin: e.target.value})} 
+                placeholder="URL del perfil" 
+                className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-neutral-200 outline-none focus:border-deinsa-orange" 
+              />
+            </div>
+            <div className="col-span-2">
+              <label className="mb-1 block text-[10px] uppercase tracking-wide text-neutral-500">
+                Respuesta Obtenida
+              </label>
+              <textarea 
+                value={sysInfo.respuesta} 
+                onChange={e => setSysInfo({...sysInfo, respuesta: e.target.value})} 
+                placeholder="Respuesta del Excel..." 
+                rows={2} 
+                className="w-full resize-none rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-neutral-200 outline-none focus:border-deinsa-orange" 
+              />
+            </div>
+          </div>
 
           <h3 className="mb-2 mt-5 border-t border-neutral-800 pt-4 text-xs font-semibold uppercase tracking-wide text-neutral-500">
             Historial de comentarios

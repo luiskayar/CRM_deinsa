@@ -1,11 +1,11 @@
-import { BOARD_COLUMNS, BOARD_LABELS, EXPORT_SHEET_NAME } from "./constants";
+import { BOARD_COLUMNS, BOARD_LABELS, EXPORT_SHEET_NAME, COUNTRY_CODES } from "./constants";
 import { normalizeText } from "./search";
 import { BoardType, CardItem } from "./types";
 
 export type ImportRowOutcome = {
   row: number;
   name: string;
-  status: "importado" | "duplicado" | "error";
+  status: "importado" | "actualizado" | "error"; 
   detail?: string;
 };
 
@@ -15,9 +15,6 @@ export type ImportSheetOutcome = {
   rows: ImportRowOutcome[];
 };
 
-// Une el nombre de hoja del archivo cargado con el tablero al que corresponde,
-// aceptando tanto el nombre usado en la exportación ("Leads"/"Aliados") como
-// el nombre del tablero en pantalla ("Negociaciones"/"Alianzas").
 function resolveBoardType(sheetName: string): BoardType | null {
   const normalized = normalizeText(sheetName.trim());
   for (const boardType of Object.keys(BOARD_LABELS) as BoardType[]) {
@@ -27,14 +24,6 @@ function resolveBoardType(sheetName: string): BoardType | null {
     }
   }
   return null;
-}
-
-function resolveColumnId(boardType: BoardType, etapaRaw: string): string | null {
-  const columns = BOARD_COLUMNS[boardType];
-  if (!etapaRaw.trim()) return columns[0].id;
-  const normalized = normalizeText(etapaRaw.trim());
-  const match = columns.find((column) => normalizeText(column.label) === normalized);
-  return match ? match.id : null;
 }
 
 function cellText(cell: import("exceljs").Cell): string {
@@ -57,13 +46,8 @@ function chunk<T>(items: T[], size: number): T[][] {
   return chunks;
 }
 
-// Carga masiva a través de /api/board (Admin SDK del lado servidor), ya que
-// Firestore ya no acepta escrituras directas desde el cliente. Se trocea en
-// grupos de 500 porque ese es el máximo de operaciones por batch de Firestore.
-async function bulkAddCards(
-  boardType: BoardType,
-  items: { name: string; columnId: string }[]
-) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function bulkAddCards(boardType: BoardType, items: any[]) {
   for (const group of chunk(items, 500)) {
     const res = await fetch("/api/board", {
       method: "POST",
@@ -80,8 +64,24 @@ async function bulkAddCards(
   }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function updateCardApi(boardType: BoardType, id: string, payload: any) {
+  const res = await fetch("/api/board", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      type: boardType,
+      action: "update",
+      id,
+      payload,
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`Error al actualizar tarjeta ${id}`);
+  }
+}
+
 export async function downloadImportTemplate() {
-  // Descarga directamente el archivo físico alojado en la carpeta public/
   const link = document.createElement("a");
   link.href = "/plantilla-importacion-deinsa-crm.xlsx";
   link.download = "plantilla-importacion-deinsa-crm.xlsx";
@@ -90,9 +90,6 @@ export async function downloadImportTemplate() {
   document.body.removeChild(link);
 }
 
-// Lee el archivo cargado, valida cada fila y crea los registros nuevos en
-// Firestore. Evita duplicados comparando el nombre (sin mayúsculas/acentos)
-// contra los registros ya existentes y contra el resto del propio archivo.
 export async function importWorkbookFile(
   file: File,
   existingCardsByBoard: Record<BoardType, CardItem[]>
@@ -105,59 +102,87 @@ export async function importWorkbookFile(
   const outcomes: ImportSheetOutcome[] = [];
 
   for (const worksheet of workbook.worksheets) {
-    const boardType = resolveBoardType(worksheet.name);
-    if (!boardType) {
-      outcomes.push({ sheetName: worksheet.name, boardType: null, rows: [] });
-      continue;
-    }
-
-    const seenNames = new Set(
-      existingCardsByBoard[boardType].map((card) => normalizeText(card.name))
-    );
+    const boardType = resolveBoardType(worksheet.name) || (Object.keys(BOARD_LABELS)[0] as BoardType);
+    const existingCards = existingCardsByBoard[boardType];
+    
     const rows: ImportRowOutcome[] = [];
-    const toCreate: { name: string; columnId: string }[] = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const toCreate: any[] = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const toUpdate: { id: string; payload: any }[] = [];
 
     worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
       if (rowNumber === 1) return; // encabezado
 
-      const name = cellText(row.getCell(1));
-      const etapaRaw = cellText(row.getCell(2));
-      if (!name && !etapaRaw) return; // fila vacía, se ignora sin error
+      const contactName = cellText(row.getCell(1));
+      const contactRole = cellText(row.getCell(2));
+      const empresa = cellText(row.getCell(3));
+      const industria = cellText(row.getCell(4));
+      const pais = cellText(row.getCell(5));
+      const sector = cellText(row.getCell(6));
+      const sitioWeb = cellText(row.getCell(7));
+      const linkedin = cellText(row.getCell(8));
+      const email = cellText(row.getCell(9));
+      const phone = cellText(row.getCell(10));
+      const respuesta = cellText(row.getCell(11));
 
-      if (!name) {
-        rows.push({ row: rowNumber, name: "", status: "error", detail: "Falta el nombre." });
-        return;
-      }
+      const name = empresa || contactName;
+      if (!name) return; // fila vacía, se ignora
+
+      const mappedCountry = COUNTRY_CODES.find(c => normalizeText(c.country) === normalizeText(pais)) || COUNTRY_CODES[0];
+      
+      const contact = { 
+        name: contactName, 
+        role: contactRole, 
+        email, 
+        countryCode: mappedCountry.code, 
+        phone 
+      };
+
+      const sysInfo = { industria, sector, sitioWeb, linkedin, respuesta };
+      const sysText = `__SYSTEM_INFO__${JSON.stringify(sysInfo)}`;
+      const sysComment = { 
+        id: `sys-${Date.now()}-${rowNumber}`, 
+        text: sysText, 
+        createdAt: new Date().toISOString() 
+      };
 
       const normalizedName = normalizeText(name);
-      if (seenNames.has(normalizedName)) {
-        rows.push({
-          row: rowNumber,
-          name,
-          status: "duplicado",
-          detail: "Ya existe un registro con este nombre.",
-        });
-        return;
-      }
+      const existing = existingCards.find(c => normalizeText(c.name) === normalizedName);
 
-      const columnId = resolveColumnId(boardType, etapaRaw);
-      if (!columnId) {
-        rows.push({
-          row: rowNumber,
-          name,
-          status: "error",
-          detail: `Etapa "${etapaRaw}" no reconocida.`,
+      if (existing) {
+        const filteredComments = existing.comments.filter(c => !c.text.startsWith("__SYSTEM_INFO__"));
+        toUpdate.push({
+          id: existing.id,
+          payload: { 
+            contact, 
+            comments: [...filteredComments, sysComment] 
+          }
         });
-        return;
+        rows.push({ 
+          row: rowNumber, 
+          name, 
+          status: "actualizado", 
+          detail: "Registro actualizado exitosamente" 
+        });
+      } else {
+        toCreate.push({
+          name,
+          columnId: "importaciones", // 🔥 FORZADO EXPLÍCITAMENTE AL ID DE LA NUEVA COLUMNA
+          createdAt: new Date().toISOString(),
+          comments: [sysComment],
+          contact 
+        });
+        rows.push({ row: rowNumber, name, status: "importado" });
       }
-
-      seenNames.add(normalizedName);
-      toCreate.push({ name, columnId });
-      rows.push({ row: rowNumber, name, status: "importado" });
     });
 
     if (toCreate.length > 0) {
       await bulkAddCards(boardType, toCreate);
+    }
+    
+    for (const update of toUpdate) {
+      await updateCardApi(boardType, update.id, update.payload);
     }
 
     outcomes.push({ sheetName: worksheet.name, boardType, rows });
