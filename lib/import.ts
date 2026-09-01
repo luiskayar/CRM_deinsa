@@ -2,10 +2,6 @@ import { BOARD_COLUMNS, BOARD_LABELS, EXPORT_SHEET_NAME } from "./constants";
 import { normalizeText } from "./search";
 import { BoardType, CardItem } from "./types";
 
-// Encabezados de la plantilla de importación (RF-04): lo mínimo para crear
-// un registro, la etapa se valida contra las columnas reales del tablero.
-export const IMPORT_TEMPLATE_HEADERS = ["Nombre", "Etapa"];
-
 export type ImportRowOutcome = {
   row: number;
   name: string;
@@ -18,17 +14,6 @@ export type ImportSheetOutcome = {
   boardType: BoardType | null;
   rows: ImportRowOutcome[];
 };
-
-function downloadBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-}
 
 // Une el nombre de hoja del archivo cargado con el tablero al que corresponde,
 // aceptando tanto el nombre usado en la exportación ("Leads"/"Aliados") como
@@ -96,36 +81,13 @@ async function bulkAddCards(
 }
 
 export async function downloadImportTemplate() {
-  const { default: ExcelJS } = await import("exceljs");
-  const workbook = new ExcelJS.Workbook();
-  workbook.creator = "Deinsa CRM";
-  workbook.created = new Date();
-
-  for (const boardType of Object.keys(BOARD_LABELS) as BoardType[]) {
-    const worksheet = workbook.addWorksheet(EXPORT_SHEET_NAME[boardType]);
-    worksheet.columns = [
-      { header: IMPORT_TEMPLATE_HEADERS[0], width: 32 },
-      { header: IMPORT_TEMPLATE_HEADERS[1], width: 24 },
-    ];
-    worksheet.getRow(1).font = { bold: true };
-
-    // "dataValidations" existe en runtime pero falta en los typings de exceljs.
-    const worksheetWithValidations = worksheet as typeof worksheet & {
-      dataValidations: { add(address: string, validation: Record<string, unknown>): void };
-    };
-    const stageLabels = BOARD_COLUMNS[boardType].map((column) => column.label);
-    worksheetWithValidations.dataValidations.add("B2:B1000", {
-      type: "list",
-      allowBlank: true,
-      formulae: [`"${stageLabels.join(",")}"`],
-    });
-  }
-
-  const buffer = await workbook.xlsx.writeBuffer();
-  const blob = new Blob([buffer], {
-    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  });
-  downloadBlob(blob, "plantilla-importacion-deinsa-crm.xlsx");
+  // Descarga directamente el archivo físico alojado en la carpeta public/
+  const link = document.createElement("a");
+  link.href = "/plantilla-importacion-deinsa-crm.xlsx";
+  link.download = "plantilla-importacion-deinsa-crm.xlsx";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 }
 
 // Lee el archivo cargado, valida cada fila y crea los registros nuevos en
