@@ -62,17 +62,11 @@ export function CardModal({
   const [editingIndex, setEditingIndex] = useState<number | "new" | null>(
     initialContacts.length === 0 ? "new" : null
   );
-  const [contactCountryIso, setContactCountryIso] = useState(
-    () =>
-      COUNTRY_CODES.find((c) => c.code === card.contact?.countryCode)?.iso ??
-      COUNTRY_CODES[0].iso
-  );
-  const [contactPhone, setContactPhone] = useState(card.contact?.phone ?? "");
+
   const [contactName, setContactName] = useState("");
   const [contactRole, setContactRole] = useState("");
   const [contactEmail, setContactEmail] = useState("");
   const [contactCountryCode, setContactCountryCode] = useState(COUNTRY_CODES[0].code);
-  // Identifica la opción seleccionada del <select> por ISO, no por prefijo:
   const [contactCountryIso, setContactCountryIso] = useState(COUNTRY_CODES[0].iso);
   const [contactPhone, setContactPhone] = useState("");
   const [contactError, setContactError] = useState<string | null>(null);
