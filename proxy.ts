@@ -38,7 +38,7 @@ export async function proxy(req: NextRequest) {
 
   // 3. Si YA tiene acceso e intenta ir al login, lo mandamos de regreso al trabajo
   if (tieneAccesoValido && url.pathname === '/login') {
-    url.pathname = '/negociaciones';
+    url.pathname = '/';
     return NextResponse.redirect(url);
   }
 

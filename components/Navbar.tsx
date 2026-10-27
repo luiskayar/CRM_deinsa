@@ -1,19 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { useParams, usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { BOARD_LABELS } from "@/lib/constants";
+import { BOARD_LABELS, DEFAULT_PIPELINE } from "@/lib/constants";
 import { BoardType } from "@/lib/types";
+import { PipelineSelector } from "./PipelineSelector";
 
-const TABS: { href: string; boardType: BoardType }[] = [
-  { href: "/negociaciones", boardType: "negociaciones" },
-  { href: "/alianzas", boardType: "alianzas" },
-];
+const TABS: BoardType[] = ["negociaciones", "alianzas"];
 
 export function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
+  const params = useParams<{ pipeline?: string }>();
+  const pipelineId = params.pipeline ?? DEFAULT_PIPELINE.id;
 
   // EFECTO DE INACTIVIDAD (15 Minutos)
   useEffect(() => {
@@ -62,20 +62,22 @@ export function Navbar() {
         <span className="text-lg font-bold tracking-wide text-neutral-100">
           DEINSA <span className="text-deinsa-orange">CRM</span>
         </span>
+        <PipelineSelector currentPipelineId={pipelineId} canCreate />
         <nav className="flex gap-6">
-          {TABS.map((tab) => {
-            const active = pathname?.startsWith(tab.href);
+          {TABS.map((boardType) => {
+            const href = `/${pipelineId}/${boardType}`;
+            const active = pathname?.startsWith(href);
             return (
               <Link
-                key={tab.href}
-                href={tab.href}
+                key={boardType}
+                href={href}
                 className={`border-b-2 pb-1 text-sm font-medium transition-colors ${
                   active
                     ? "border-deinsa-orange text-neutral-50"
                     : "border-transparent text-neutral-400 hover:text-neutral-200"
                 }`}
               >
-                {BOARD_LABELS[tab.boardType]}
+                {BOARD_LABELS[boardType]}
               </Link>
             );
           })}

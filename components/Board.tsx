@@ -20,7 +20,7 @@ import { getCardContacts } from "@/lib/contact";
 import { cardsToExportRows, EXPORT_HEADERS, exportRowsToPdf, exportSheetsToExcel } from "@/lib/export";
 import { downloadImportTemplate, importWorkbookFile, ImportSheetOutcome } from "@/lib/import";
 import { normalizeText } from "@/lib/search";
-import { BoardType, CardItem } from "@/lib/types";
+import { BoardType, CardItem, Pipeline } from "@/lib/types";
 import { fetchBoardCards, useBoard } from "@/hooks/useBoard";
 import { Column } from "./Column";
 import { CardModal } from "./CardModal";
@@ -35,7 +35,7 @@ const OTHER_BOARD_TYPE: Record<BoardType, BoardType> = {
 const AUTO_SCROLL_SPEED = 12; // px por tick mientras el mouse está sobre la flecha
 const ARROW_SCROLL_STEP = 288; // ancho de una columna, para el click/tap
 
-export function Board({ boardType }: { boardType: BoardType }) {
+export function Board({ boardType, pipeline }: { boardType: BoardType; pipeline: Pipeline }) {
   const {
     cards,
     loading,
@@ -44,7 +44,7 @@ export function Board({ boardType }: { boardType: BoardType }) {
     addCard,
     updateCard,
     deleteCard,
-  } = useBoard(boardType);
+  } = useBoard(boardType, pipeline.id);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const columns = BOARD_COLUMNS[boardType];
@@ -83,10 +83,10 @@ export function Board({ boardType }: { boardType: BoardType }) {
     setExporting("pdf");
     try {
       await exportRowsToPdf({
-        title: `${BOARD_LABELS[boardType]} — Deinsa CRM`,
+        title: `${BOARD_LABELS[boardType]} — ${pipeline.name} — Deinsa CRM`,
         headers: EXPORT_HEADERS,
         rows: cardsToExportRows(filteredCards, columns),
-        filename: `${boardType}-${new Date().toISOString().slice(0, 10)}.pdf`,
+        filename: `${pipeline.id}-${boardType}-${new Date().toISOString().slice(0, 10)}.pdf`,
       });
     } catch (err) {
       console.error(err);
@@ -101,7 +101,7 @@ export function Board({ boardType }: { boardType: BoardType }) {
     setExporting("excel");
     try {
       const otherBoardType = OTHER_BOARD_TYPE[boardType];
-      const otherCards = await fetchBoardCards(otherBoardType);
+      const otherCards = await fetchBoardCards(otherBoardType, pipeline.id);
       const currentSheet = {
         name: EXPORT_SHEET_NAME[boardType],
         headers: EXPORT_HEADERS,
@@ -114,7 +114,7 @@ export function Board({ boardType }: { boardType: BoardType }) {
       };
       await exportSheetsToExcel({
         sheets: boardType === "negociaciones" ? [currentSheet, otherSheet] : [otherSheet, currentSheet],
-        filename: `deinsa-crm-${new Date().toISOString().slice(0, 10)}.xlsx`,
+        filename: `deinsa-crm-${pipeline.id}-${new Date().toISOString().slice(0, 10)}.xlsx`,
       });
     } catch (err) {
       console.error(err);
@@ -144,7 +144,7 @@ export function Board({ boardType }: { boardType: BoardType }) {
       } as Record<BoardType, CardItem[]>;
       
       // 🔥 Le pasamos a la función `boardType` para que sepa dónde estamos
-      const outcomes = await importWorkbookFile(file, existingCardsByBoard, boardType);
+      const outcomes = await importWorkbookFile(file, existingCardsByBoard, boardType, pipeline.id);
       setImportResult(outcomes);
     } catch (err) {
       console.error(err);
