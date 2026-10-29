@@ -1,61 +1,56 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { adminDb } from "@/lib/firebase-admin"; 
+import { adminDb } from "@/lib/firebase-admin"; // 🔥 AQUÍ ESTÁ LA MAGIA: EL PASE VIP
 import { SignJWT } from "jose";
-import bcrypt from "bcryptjs";
 
 export async function POST(req: Request) {
   try {
-    let ip = req.headers.get("x-real-ip") || req.headers.get("x-forwarded-for")?.split(',')[0].trim() || "127.0.0.1";
+    let ip = req.headers.get("x-real-ip");
+    
+    if (!ip) {
+      const forwarded = req.headers.get("x-forwarded-for");
+      ip = forwarded ? forwarded.split(',')[0].trim() : "127.0.0.1";
+    }
+
     const dispositivo = req.headers.get("user-agent") || "Navegador_Desconocido";
+
     const huellaDigital = `${ip}-${dispositivo}`.replace(/[^a-zA-Z0-9.:]/g, "_");
     
+    // 🔥 USAMOS ADMIN DB PARA SALTARNOS LAS REGLAS DE FIREBASE
     const ipRef = adminDb.collection("intentos_login").doc(huellaDigital);
     const ipDoc = await ipRef.get();
     
-    let intentos = ipDoc.data()?.intentos || 0;
-    let bloqueadoHasta = ipDoc.data()?.bloqueadoHasta || 0;
+    let intentos = 0;
+    let bloqueadoHasta = 0;
 
-    if (bloqueadoHasta && Date.now() < bloqueadoHasta) {
-      return NextResponse.json({ error: "Demasiados intentos fallidos. Bloqueado por 15 minutos." }, { status: 429 });
-    }
+    if (ipDoc.exists) {
+      const data = ipDoc.data();
+      intentos = data?.intentos || 0;
+      bloqueadoHasta = data?.bloqueadoHasta || 0;
 
-    const { usuario, password } = await req.json();
-
-    let usuarioValido = false;
-    let rol = "visualizador"; 
-
-    // 1. PRIMERO BUSCAMOS EN FIREBASE (Cuentas creadas después)
-    const userDocRef = adminDb.collection("usuarios").where("usuario", "==", usuario);
-    const userSnapshot = await userDocRef.get();
-    
-    if (!userSnapshot.empty) {
-      const userData = userSnapshot.docs[0].data();
-      
-      // 🔥 Comparamos la contraseña en texto plano con el hash guardado en Firebase
-      const match = await bcrypt.compare(password, userData.password);
-      
-      if (match) {
-        usuarioValido = true;
-        rol = userData.rol;
+      if (bloqueadoHasta && Date.now() < bloqueadoHasta) {
+        return NextResponse.json(
+          { error: "Demasiados intentos fallidos. Bloqueado por 15 minutos." },
+          { status: 429 }
+        );
       }
-    } 
-    // 2. SI NO ESTÁ EN FIREBASE, VERIFICAMOS LA CUENTA MAESTRA DEL .ENV
-    else if (usuario === process.env.CRM_USUARIO && password === process.env.CRM_PASSWORD) {
-      usuarioValido = true;
-      rol = "superusuario";
     }
 
-    // 3. SI ALGUNA DE LAS DOS FUE CORRECTA, LE DAMOS ACCESO
-    if (usuarioValido) {
-      if (ipDoc.exists) await ipRef.delete();
+    const body = await req.json();
+    const { usuario, password } = body;
+
+    const usuarioCorrecto = process.env.CRM_USUARIO || "";
+    const passwordCorrecto = process.env.CRM_PASSWORD || "";
+
+    if (usuario === usuarioCorrecto && password === passwordCorrecto) {
       
-      const secretString = process.env.JWT_SECRET || process.env.CRM_PASSWORD || "tu_secreto_seguro";
-      const secret = new TextEncoder().encode(secretString);
+      if (ipDoc.exists) {
+        await ipRef.delete();
+      }
       
-      const token = await new SignJWT({ usuario, rol })
+      const secret = new TextEncoder().encode(passwordCorrecto);
+      const token = await new SignJWT({ acceso_concedido: true })
         .setProtectedHeader({ alg: 'HS256' })
-        .setExpirationTime('12h')
         .sign(secret);
 
       const cookieStore = await cookies();
@@ -66,37 +61,54 @@ export async function POST(req: Request) {
         path: "/",
       });
 
-      await adminDb.collection("logs_auditoria").add({
+      await adminDb.collection("logs_auditoria").add({ // 🔥 USAMOS ADMIN DB
         evento: "LOGIN_EXITOSO",
         fecha: new Date().toISOString(),
         ip: ip,
         dispositivo: dispositivo,
-        usuario_ingresado: usuario,
-        rol: rol
+        usuario_ingresado: usuario
       });
 
-      return NextResponse.json({ success: true, rol }, { status: 200 });
+      return NextResponse.json({ success: true }, { status: 200 });
     }
 
-    // SI LA CONTRASEÑA FUE INCORRECTA
     intentos += 1;
-    let nuevoBloqueo = intentos >= 5 ? Date.now() + 900000 : 0;
-    await ipRef.set({ intentos, bloqueadoHasta: nuevoBloqueo });
+    let nuevoBloqueo = 0;
+    
+    if (intentos >= 5) {
+      nuevoBloqueo = Date.now() + 900000;
+    }
 
-    await adminDb.collection("logs_auditoria").add({
+    await ipRef.set({ // 🔥 USAMOS ADMIN DB
+      intentos: intentos,
+      bloqueadoHasta: nuevoBloqueo
+    });
+
+    await adminDb.collection("logs_auditoria").add({ // 🔥 USAMOS ADMIN DB
       evento: "INTENTO_FALLIDO",
       fecha: new Date().toISOString(),
       ip: ip,
+      dispositivo: dispositivo,
       usuario_ingresado: usuario,
       intento_numero: intentos
     });
 
-    return NextResponse.json(
-      { error: intentos >= 5 ? "Bloqueado por 15 min." : `Credenciales incorrectas. Intento ${intentos} de 5.` },
-      { status: intentos >= 5 ? 429 : 401 }
-    );
+    if (intentos >= 5) {
+      return NextResponse.json(
+        { error: "Demasiados intentos fallidos. Bloqueado por 15 minutos." },
+        { status: 429 }
+      );
+    } else {
+      return NextResponse.json(
+        { error: `Credenciales incorrectas. Intento ${intentos} de 5.` },
+        { status: 401 }
+      );
+    }
   } catch (error) {
-    console.error("Error en login:", error);
-    return NextResponse.json({ error: "Error en el servidor" }, { status: 500 });
+    console.error("DETALLE DEL ERROR 500:", error);
+    return NextResponse.json(
+      { error: "Error en el servidor" },
+      { status: 500 }
+    );
   }
 }

@@ -70,14 +70,13 @@ function chunk<T>(items: T[], size: number): T[][] {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function bulkAddCards(boardType: BoardType, pipelineId: string, items: any[]) {
+async function bulkAddCards(boardType: BoardType, items: any[]) {
   for (const group of chunk(items, 500)) {
     const res = await fetch("/api/board", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         type: boardType,
-        pipelineId,
         action: "bulkAdd",
         payload: group,
       }),
@@ -100,8 +99,7 @@ export async function downloadImportTemplate() {
 export async function importWorkbookFile(
   file: File,
   existingCardsByBoard: Record<BoardType, CardItem[]>,
-  currentBoardType: BoardType,
-  pipelineId: string
+  currentBoardType: BoardType 
 ): Promise<ImportSheetOutcome[]> {
   const { default: ExcelJS } = await import("exceljs");
   const workbook = new ExcelJS.Workbook();
@@ -197,7 +195,7 @@ export async function importWorkbookFile(
     });
 
     if (toCreate.length > 0) {
-      await bulkAddCards(currentBoardType, pipelineId, toCreate);
+      await bulkAddCards(currentBoardType, toCreate);
     }
 
     outcomes.push({ sheetName: worksheet.name, boardType: currentBoardType, rows });

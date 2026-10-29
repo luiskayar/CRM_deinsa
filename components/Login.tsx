@@ -23,7 +23,7 @@ export function LoginForm() {
     const data = await res.json();
 
     if (res.ok) {
-      router.push("/");
+      router.push("/negociaciones");
       router.refresh();
     } else {
       // Mostramos el error dinámico (ej. bloqueos o credenciales incorrectas)

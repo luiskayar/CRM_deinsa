@@ -8,24 +8,20 @@ function createCommentId() {
 }
 
 // Lectura puntual a través de tu propia API segura (para exportar a Excel)
-export async function fetchBoardCards(
-  boardType: BoardType,
-  pipelineId: string
-): Promise<CardItem[]> {
-  const params = new URLSearchParams({ type: boardType, pipeline: pipelineId });
-  const res = await fetch(`/api/board?${params}`);
+export async function fetchBoardCards(boardType: BoardType): Promise<CardItem[]> {
+  const res = await fetch(`/api/board?type=${boardType}`);
   if (!res.ok) throw new Error("Error fetching board");
   return await res.json();
 }
 
-export function useBoard(boardType: BoardType, pipelineId: string) {
+export function useBoard(boardType: BoardType) {
   const [cards, setCards] = useState<CardItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const loadCards = useCallback(async () => {
     try {
-      const data = await fetchBoardCards(boardType, pipelineId);
+      const data = await fetchBoardCards(boardType);
       setCards(data);
       setError(null);
     } catch (err: unknown) {
@@ -34,7 +30,7 @@ export function useBoard(boardType: BoardType, pipelineId: string) {
     } finally {
       setLoading(false);
     }
-  }, [boardType, pipelineId]);
+  }, [boardType]);
 
   // Simulamos el tiempo real consultando la API de forma segura
   useEffect(() => {
@@ -61,7 +57,7 @@ export function useBoard(boardType: BoardType, pipelineId: string) {
     await fetch("/api/board", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: boardType, pipelineId, action, id, payload }),
+      body: JSON.stringify({ type: boardType, action, id, payload }),
     });
     await loadCards(); // Refrescamos los datos después de escribir
   }

@@ -2,56 +2,47 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
 
-// 🔥 AQUÍ ESTÁ EL CAMBIO PRINCIPAL: Se llama "proxy", no "middleware"
 export async function proxy(req: NextRequest) {
-  const token = req.cookies.get('crm_auth')?.value;
-  const url = req.nextUrl.clone();
+  const authCookie = req.cookies.get('crm_auth')?.value;
+  const passwordActual = process.env.CRM_PASSWORD || "";
   
-  // Lista blanca de rutas que no piden token
-  const isPublicRoute = ['/login', '/api/login', '/api/logout'].includes(url.pathname);
+  const url = req.nextUrl.clone();
 
-  // 1. Si NO hay token y la ruta NO es pública
-  if (!token && !isPublicRoute) {
+  // 🔥 LISTA BLANCA: Estas son las ÚNICAS rutas del sistema que no piden contraseña
+  const rutasPublicas = ['/login', '/api/login', '/api/logout'];
+  const isPublicRoute = rutasPublicas.includes(url.pathname);
+
+  let tieneAccesoValido = false;
+
+  // 1. Verificamos la firma del token
+  if (authCookie) {
+    try {
+      const secret = new TextEncoder().encode(passwordActual);
+      await jwtVerify(authCookie, secret);
+      tieneAccesoValido = true;
+    } catch (_error) { // 🔥 Aquí está la corrección: _error
+      tieneAccesoValido = false;
+    }
+  }
+
+  // 2. 🔥 EL ESCUDO (DENEGAR POR DEFECTO): Si NO tiene acceso y la ruta NO está en la lista blanca
+  if (!tieneAccesoValido && !isPublicRoute) {
+    // Si era un intento de hackear una API, devolvemos un "Acceso Denegado" puro
     if (url.pathname.startsWith('/api/')) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
+    // Si era un intento de entrar a una pantalla, lo mandamos a que se loguee
     url.pathname = '/login';
     return NextResponse.redirect(url);
   }
 
-  // 2. Si HAY token, lo verificamos
-  if (token) {
-    try {
-      // Usamos JWT_SECRET, o tu antiguo CRM_PASSWORD como respaldo de seguridad
-      const secretString = process.env.JWT_SECRET || process.env.CRM_PASSWORD || "tu_secreto_seguro";
-      const secret = new TextEncoder().encode(secretString);
-      const { payload } = await jwtVerify(token, secret);
-      
-      // Si ya tiene acceso válido e intenta ir al login, lo mandamos al inicio
-      if (url.pathname === '/login') {
-        url.pathname = '/';
-        return NextResponse.redirect(url);
-      }
-      
-      // 3. Bloquear APIs de modificación si el rol es "visualizador"
-      if (url.pathname.startsWith('/api/') && !isPublicRoute) {
-        const isWriteMethod = ['POST', 'PUT', 'DELETE', 'PATCH'].includes(req.method);
-        
-        if (payload.rol === 'visualizador' && isWriteMethod) {
-          // Excepción: Permitimos que el visualizador pueda exportar
-          if (!url.pathname.startsWith('/api/export')) {
-            return NextResponse.json({ error: 'Acceso denegado: Solo lectura' }, { status: 403 });
-          }
-        }
-      }
-    } catch (_error) {
-      // Token inválido o expirado: borramos cookie y al login
-      const response = NextResponse.redirect(new URL('/login', req.url));
-      response.cookies.delete('crm_auth');
-      return response;
-    }
+  // 3. Si YA tiene acceso e intenta ir al login, lo mandamos de regreso al trabajo
+  if (tieneAccesoValido && url.pathname === '/login') {
+    url.pathname = '/negociaciones';
+    return NextResponse.redirect(url);
   }
 
+  // 4. Si todo está en orden, lo dejamos pasar
   return NextResponse.next();
 }
 
