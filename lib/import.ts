@@ -1,6 +1,6 @@
 import { BOARD_COLUMNS, BOARD_LABELS, EXPORT_SHEET_NAME, COUNTRY_CODES } from "./constants";
 import { normalizeText } from "./search";
-import { BoardType, CardItem } from "./types";
+import { BoardType, CardItem, Comment, Contact } from "./types";
 
 export type ImportRowOutcome = {
   row: number;
@@ -13,6 +13,23 @@ export type ImportSheetOutcome = {
   sheetName: string;
   boardType: BoardType | null;
   rows: ImportRowOutcome[];
+};
+
+// 5.2.3: las celdas con varios valores (notas, contactos) se separan con ";".
+// Ejemplo: "nota 1; nota 2; nota 3".
+const MULTI_VALUE_SEPARATOR = ";";
+
+// Alias aceptados (ya normalizados: sin tildes, en minúsculas) para cada columna.
+// Incluye los encabezados de la plantilla ("Respuesta") y los de la exportación.
+const HEADER_ALIASES = {
+  company: ["empresa", "compania"],
+  contactName: ["nombre", "contacto"],
+  role: ["cargo", "puesto"],
+  email: ["correo", "email"],
+  phone: ["numero", "telefono"],
+  country: ["pais"],
+  stage: ["columna", "etapa"],
+  notes: ["notas", "nota", "comentarios", "comentario", "respuesta"],
 };
 
 function resolveBoardType(sheetName: string): BoardType | null {
@@ -59,6 +76,74 @@ function cellText(cell: import("exceljs").Cell): string {
     if (value instanceof Date) return value.toISOString();
   }
   return String(value).trim();
+}
+
+// Un valor vacío, o el literal "null" (así exporta la app los datos faltantes),
+// se registra como null.
+function toNullable(raw: string | undefined): string | null {
+  const text = (raw ?? "").trim();
+  if (!text || text.toLowerCase() === "null") return null;
+  return text;
+}
+
+function splitMultiValue(raw: string): string[] {
+  return raw.split(MULTI_VALUE_SEPARATOR);
+}
+
+function createCommentId() {
+  return `comment-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+// "nota 1; nota 2" -> 2 notas. Cada nota vacía (o "null") se descarta.
+export function parseNotes(raw: string): Comment[] {
+  const createdAt = new Date().toISOString();
+  return splitMultiValue(raw)
+    .map(toNullable)
+    .filter((text): text is string => text !== null && normalizeText(text) !== "sin comentarios")
+    .map((text) => ({ id: createCommentId(), text, createdAt }));
+}
+
+const KNOWN_CALLING_CODES = new Set(COUNTRY_CODES.map((c) => c.code));
+
+// La exportación escribe el teléfono como "+506 8888 8888": si trae un
+// prefijo conocido se separa; si no, se usa el del país de la fila.
+function splitPhone(phone: string | null, fallbackCode: string) {
+  if (!phone) return { countryCode: fallbackCode, phone: null };
+  if (phone.startsWith("+")) {
+    const digits = phone.slice(1);
+    for (let length = 4; length >= 1; length--) {
+      const code = `+${digits.slice(0, length)}`;
+      if (digits.length > length && KNOWN_CALLING_CODES.has(code)) {
+        return { countryCode: code, phone: toNullable(digits.slice(length).replace(/^[\s-]+/, "")) };
+      }
+    }
+  }
+  return { countryCode: fallbackCode, phone };
+}
+
+// Los campos de contacto se leen por posición: el n-ésimo valor de cada
+// columna pertenece al n-ésimo contacto. Lo que falte se registra como null.
+export function parseContacts(
+  raw: { names: string; roles: string; emails: string; phones: string },
+  fallbackCountryCode: string
+): Contact[] {
+  const names = splitMultiValue(raw.names);
+  const roles = splitMultiValue(raw.roles);
+  const emails = splitMultiValue(raw.emails);
+  const phones = splitMultiValue(raw.phones);
+  const total = Math.max(names.length, roles.length, emails.length, phones.length);
+
+  const contacts: Contact[] = [];
+  for (let i = 0; i < total; i++) {
+    const name = toNullable(names[i]);
+    const role = toNullable(roles[i]);
+    const email = toNullable(emails[i]);
+    const { countryCode, phone } = splitPhone(toNullable(phones[i]), fallbackCountryCode);
+    // Posición sin ningún dato (p. ej. un ";" sobrante al final): no es un contacto.
+    if (!name && !role && !email && !phone) continue;
+    contacts.push({ name, role, email, countryCode, phone });
+  }
+  return contacts;
 }
 
 function chunk<T>(items: T[], size: number): T[][] {
@@ -133,8 +218,13 @@ export async function importWorkbookFile(
     // MAPEO DINÁMICO DE COLUMNAS
     const headers: Record<string, number> = {};
     worksheet.getRow(1).eachCell((cell, colNumber) => {
-      headers[normalizeText(cellText(cell))] = colNumber;
+      headers[normalizeText(cellText(cell)).trim()] = colNumber;
     });
+
+    // Formato de la exportación: "Nombre" es la tarjeta y "Contacto" son los
+    // contactos. En la plantilla, "Empresa" es la tarjeta y "Nombre" el contacto.
+    const isExportLayout =
+      !HEADER_ALIASES.company.some((key) => headers[key]) && Boolean(headers["contacto"]);
 
     worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
       if (rowNumber === 1) return; // Saltamos encabezados
@@ -147,15 +237,11 @@ export async function importWorkbookFile(
       };
 
       // Solo extraemos los datos que nos interesan (se omiten Industria, Sector, etc.)
-      const empresa = getVal(["empresa", "compañia"]);
-      const contactName = getVal(["nombre", "contacto"]);
-      const contactRole = getVal(["cargo", "puesto"]);
-      const email = getVal(["correo", "email"]);
-      const phone = getVal(["numero", "telefono"]);
-      const pais = getVal(["pais", "país"]);
-      const columnaExcel = getVal(["columna", "etapa"]);
-
-      const name = empresa || contactName;
+      const contactNamesRaw = isExportLayout ? getVal(["contacto"]) : getVal(HEADER_ALIASES.contactName);
+      const name = isExportLayout
+        ? toNullable(getVal(["nombre"]))
+        : toNullable(getVal(HEADER_ALIASES.company)) ??
+          toNullable(splitMultiValue(contactNamesRaw)[0]);
       if (!name) return;
 
       const normalizedName = normalizeText(name);
@@ -170,16 +256,24 @@ export async function importWorkbookFile(
         return;
       }
 
-      const mappedCountry = COUNTRY_CODES.find(c => normalizeText(c.country) === normalizeText(pais)) || COUNTRY_CODES[0];
-      const contact = {
-        name: contactName,
-        role: contactRole,
-        email,
-        countryCode: mappedCountry.code,
-        phone
-      };
+      const pais = getVal(HEADER_ALIASES.country);
+      const mappedCountry =
+        COUNTRY_CODES.find((c) => normalizeText(c.country) === normalizeText(pais.trim())) ||
+        COUNTRY_CODES[0];
 
-      let columnId = resolveColumnId(currentBoardType, columnaExcel);
+      // N contactos y N notas por fila, separados por ";"
+      const contacts = parseContacts(
+        {
+          names: contactNamesRaw,
+          roles: getVal(HEADER_ALIASES.role),
+          emails: getVal(HEADER_ALIASES.email),
+          phones: getVal(HEADER_ALIASES.phone),
+        },
+        mappedCountry.code
+      );
+      const comments = parseNotes(getVal(HEADER_ALIASES.notes));
+
+      let columnId = resolveColumnId(currentBoardType, getVal(HEADER_ALIASES.stage));
       if (!columnId) {
          columnId = BOARD_COLUMNS[currentBoardType][0].id;
       }
@@ -190,8 +284,8 @@ export async function importWorkbookFile(
         name,
         columnId,
         createdAt: new Date().toISOString(),
-        comments: [], // 🔥 Ahora se envían los comentarios vacíos
-        contact 
+        comments,
+        contacts,
       });
       rows.push({ row: rowNumber, name, status: "importado" });
     });
