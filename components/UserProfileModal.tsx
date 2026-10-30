@@ -198,11 +198,11 @@ export function UserProfileModal({ esSuperAdmin, nombreUsuario }: UserProfileMod
                 <div className="flex flex-col gap-4">
                   <div>
                     <label className="mb-1 block text-xs uppercase tracking-wide text-neutral-500">Nombre de Usuario</label>
-                    <input value={nuevoUsuario} onChange={(e) => setNuevoUsuario(e.target.value)} placeholder="Ej. juan.perez" className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-sm text-neutral-100 outline-none focus:border-deinsa-orange" />
+                    <input value={nuevoUsuario} onChange={(e) => setNuevoUsuario(e.target.value)} placeholder="Ej. Luis Umana" className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-sm text-neutral-100 outline-none focus:border-deinsa-orange" />
                   </div>
                   <div>
                     <label className="mb-1 block text-xs uppercase tracking-wide text-neutral-500">Contraseña</label>
-                    <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Asigna una contraseña segura" className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-sm text-neutral-100 outline-none focus:border-deinsa-orange" />
+                    <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Asigna una contraseña" className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-sm text-neutral-100 outline-none focus:border-deinsa-orange" />
                   </div>
                   <div>
                     <label className="mb-1 block text-xs uppercase tracking-wide text-neutral-500">Rol del Usuario</label>
