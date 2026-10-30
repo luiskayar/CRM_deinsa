@@ -29,11 +29,35 @@ function formatContactPhone(contact: Contact) {
   return contact.countryCode ? `${contact.countryCode} ${contact.phone}` : contact.phone;
 }
 
+// 5.2.3: en el Excel, los contactos y las notas múltiples van en una sola
+// celda separados por ";" (el mismo formato que acepta la importación).
+// Un dato faltante de un contacto se escribe "null" para no perder la posición.
+const EXCEL_SEPARATOR = "; ";
+const EXCEL_NULL = "null";
+
+// El ";" es el separador, así que dentro de un valor se cambia por ",".
+function sanitizeForExcel(value: string) {
+  return value.replace(/;/g, ",").trim();
+}
+
+function formatContactsFieldForExcel(contacts: Contact[], pick: (contact: Contact) => string) {
+  return contacts
+    .map((contact) => sanitizeForExcel(pick(contact) ?? "") || EXCEL_NULL)
+    .join(EXCEL_SEPARATOR);
+}
+
+function formatCommentsForExcel(comments: Comment[]) {
+  return comments
+    .map((comment) => sanitizeForExcel(comment.text))
+    .filter(Boolean)
+    .join(EXCEL_SEPARATOR);
+}
+
 // Une el mismo campo de todos los contactos de la tarjeta en una sola celda,
 // una línea por contacto (se combina con "wrapText"/"linebreak" al exportar).
 function formatContactsField(contacts: Contact[], pick: (contact: Contact) => string) {
   return contacts
-    .map(pick)
+    .map((contact) => pick(contact) ?? "")
     .map((value) => value.trim())
     .filter(Boolean)
     .join("\n");
@@ -48,17 +72,30 @@ function formatComments(comments: Comment[]) {
 
 export function cardsToExportRows(
   cards: CardItem[],
-  columns: Column[]
+  columns: Column[],
+  format: "pdf" | "excel" = "pdf"
 ): (string | number)[][] {
   const stageLabel = new Map(columns.map((column) => [column.id, column.label]));
   return cards.map((card) => {
     const contacts = getCardContacts(card);
+    if (format === "excel") {
+      return [
+        card.name,
+        stageLabel.get(card.columnId) ?? card.columnId,
+        formatContactsFieldForExcel(contacts, (c) => c.name ?? ""),
+        formatContactsFieldForExcel(contacts, (c) => c.role ?? ""),
+        formatContactsFieldForExcel(contacts, (c) => c.email ?? ""),
+        formatContactsFieldForExcel(contacts, formatContactPhone),
+        formatExportDate(card.createdAt),
+        formatCommentsForExcel(card.comments),
+      ];
+    }
     return [
       card.name,
       stageLabel.get(card.columnId) ?? card.columnId,
-      formatContactsField(contacts, (c) => c.name),
-      formatContactsField(contacts, (c) => c.role),
-      formatContactsField(contacts, (c) => c.email),
+      formatContactsField(contacts, (c) => c.name ?? ""),
+      formatContactsField(contacts, (c) => c.role ?? ""),
+      formatContactsField(contacts, (c) => c.email ?? ""),
       formatContactsField(contacts, formatContactPhone),
       formatExportDate(card.createdAt),
       formatComments(card.comments),

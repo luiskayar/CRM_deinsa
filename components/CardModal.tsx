@@ -97,15 +97,15 @@ export function CardModal({
 
   function handleEditContactClick(index: number) {
     const target = contacts[index];
-    setContactName(target.name);
-    setContactRole(target.role);
-    setContactEmail(target.email);
+    setContactName(target.name ?? "");
+    setContactRole(target.role ?? "");
+    setContactEmail(target.email ?? "");
     setContactCountryCode(target.countryCode);
     setContactCountryIso(
       COUNTRY_CODES.find((c) => c.code === target.countryCode)?.iso ??
         COUNTRY_CODES[0].iso
     );
-    setContactPhone(target.phone);
+    setContactPhone(target.phone ?? "");
     setContactError(null);
     setEditingIndex(index);
   }
@@ -309,7 +309,7 @@ export function CardModal({
                 >
                   <div>
                     <p className="text-sm text-neutral-200">
-                      {c.name}
+                      {c.name ?? "Sin nombre"}
                       {c.role && <span className="text-neutral-500"> — {c.role}</span>}
                     </p>
                     <p className="mt-1 text-xs text-neutral-500">{c.email || "Sin correo"}</p>
