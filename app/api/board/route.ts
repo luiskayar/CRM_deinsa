@@ -1,17 +1,17 @@
 import { NextResponse } from "next/server";
-import { FieldValue } from "firebase-admin/firestore";
-import { adminDb } from "@/lib/firebase-admin";
 import { BOARD_COLLECTION } from "@/lib/constants";
+import { BoardType } from "@/lib/types";
+import { getPipeline } from "@/lib/server/pipelines";
+import { addCard, bulkAddCards, deleteCard, listCards, updateCard } from "@/lib/server/board";
 
-// Los valores null llegan desde el cliente cuando se quiere borrar un campo
-// (p. ej. eliminar el contacto de RF-05); el Admin SDK solo borra campos de
-// verdad con el sentinel FieldValue.delete() en updates.
-function toFirestoreUpdate(payload: Record<string, unknown>) {
-  const result: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(payload)) {
-    result[key] = value === null ? FieldValue.delete() : value;
-  }
-  return result;
+function isBoardType(type: unknown): type is BoardType {
+  return typeof type === "string" && type in BOARD_COLLECTION;
+}
+
+// Devuelve el id si el pipeline existe; null en caso contrario.
+async function resolvePipelineId(pipelineId: unknown): Promise<string | null> {
+  if (typeof pipelineId !== "string") return null;
+  return (await getPipeline(pipelineId))?.id ?? null;
 }
 
 // 1. Maneja las lecturas (GET)
@@ -19,20 +19,16 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const type = searchParams.get("type");
 
-  if (!type || !BOARD_COLLECTION[type as keyof typeof BOARD_COLLECTION]) {
+  if (!isBoardType(type)) {
     return NextResponse.json({ error: "Tipo de tablero inválido" }, { status: 400 });
   }
 
   try {
-    const collectionName = BOARD_COLLECTION[type as keyof typeof BOARD_COLLECTION];
-    const snapshot = await adminDb.collection(collectionName).orderBy("createdAt", "asc").get();
-
-    const cards = snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    }));
-
-    return NextResponse.json(cards);
+    const pipelineId = await resolvePipelineId(searchParams.get("pipeline"));
+    if (!pipelineId) {
+      return NextResponse.json({ error: "Pipeline no encontrado" }, { status: 404 });
+    }
+    return NextResponse.json(await listCards(type, pipelineId));
   } catch (error) {
     console.error("Error GET /api/board:", error);
     return NextResponse.json({ error: "Error al obtener datos" }, { status: 500 });
@@ -45,49 +41,38 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { action, type, id, payload } = body;
 
-    if (!type || !BOARD_COLLECTION[type as keyof typeof BOARD_COLLECTION]) {
+    if (!isBoardType(type)) {
       return NextResponse.json({ error: "Tipo de tablero inválido" }, { status: 400 });
     }
-
-    const collectionName = BOARD_COLLECTION[type as keyof typeof BOARD_COLLECTION];
-    const collectionRef = adminDb.collection(collectionName);
+    const pipelineId = await resolvePipelineId(body.pipelineId);
+    if (!pipelineId) {
+      return NextResponse.json({ error: "Pipeline no encontrado" }, { status: 404 });
+    }
 
     // 🔥 CARGA MASIVA (Requerimiento de Brenda para importaciones)
     if (action === "bulkAdd") {
       if (!Array.isArray(payload)) {
         return NextResponse.json({ error: "El payload debe ser un array para bulkAdd" }, { status: 400 });
       }
-
-      const batch = adminDb.batch();
-
-      for (const item of payload) {
-        const newDocRef = collectionRef.doc();
-        batch.set(newDocRef, {
-          name: item.name || "",
-          columnId: item.columnId || "",
-          createdAt: item.createdAt || new Date().toISOString(),
-          comments: item.comments || [],
-          // 🔥 AHORA SÍ GUARDAMOS EL CONTACTO Y ESTADO AL IMPORTAR MASIVAMENTE
-          contact: item.contact || null,
-          status: item.status || null,
-        });
-      }
-
-      await batch.commit();
+      await bulkAddCards(type, pipelineId, payload);
       return NextResponse.json({ success: true, count: payload.length });
     }
 
     // Acciones individuales
+    let found = true;
     if (action === "add") {
-      await collectionRef.add(payload);
+      await addCard(type, pipelineId, payload);
     } else if (action === "move" || action === "update") {
-      await collectionRef.doc(id).update(toFirestoreUpdate(payload));
+      found = await updateCard(type, pipelineId, id, payload);
     } else if (action === "delete") {
-      await collectionRef.doc(id).delete();
+      found = await deleteCard(type, pipelineId, id);
     } else {
       return NextResponse.json({ error: "Acción no reconocida" }, { status: 400 });
     }
 
+    if (!found) {
+      return NextResponse.json({ error: "Tarjeta no encontrada en este pipeline" }, { status: 404 });
+    }
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Error POST /api/board:", error);
