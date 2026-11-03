@@ -13,12 +13,13 @@ export type Comment = {
   createdAt: string;
 };
 
+// Un dato faltante (p. ej. importado desde Excel sin correo) se guarda como null.
 export type Contact = {
-  name: string;
-  role: string;
-  email: string;
+  name: string | null;
+  role: string | null;
+  email: string | null;
   countryCode: string;
-  phone: string;
+  phone: string | null;
 };
 
 export type NegotiationStatus = "pausada" | "activa" | "muyActiva";

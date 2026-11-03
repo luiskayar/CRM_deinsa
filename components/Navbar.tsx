@@ -23,6 +23,8 @@ export function Navbar({ rolUsuario = "visualizador", nombreUsuario = "" }: Navb
 
   // 🔥 Calculamos si tiene permisos para crear pipelines
   const puedeAdministrar = rolUsuario === "administrador" || rolUsuario === "superusuario";
+  // Eliminar pipelines queda reservado al administrador.
+  const puedeEliminar = rolUsuario === "administrador";
 
   useEffect(() => {
     if (pathname === "/login") return;
@@ -71,7 +73,7 @@ export function Navbar({ rolUsuario = "visualizador", nombreUsuario = "" }: Navb
             DEINSA <span className="text-deinsa-orange">CRM</span>
           </span>
           
-          <PipelineSelector currentPipelineId={pipelineId} canCreate={puedeAdministrar} />
+          <PipelineSelector currentPipelineId={pipelineId} canManage={puedeAdministrar} canDelete={puedeEliminar} />
           
           <nav className="flex gap-6">
             {TABS.map((boardType) => {

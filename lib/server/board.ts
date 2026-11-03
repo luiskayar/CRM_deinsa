@@ -1,6 +1,6 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase-admin";
-import { BOARD_COLLECTION, DEFAULT_PIPELINE } from "@/lib/constants";
+import { BOARD_COLLECTION, COUNTRY_CODES, DEFAULT_PIPELINE } from "@/lib/constants";
 import { BoardType } from "@/lib/types";
 
 // Único punto de acceso a Firestore para las tarjetas: al migrar a la BD en
@@ -45,6 +45,19 @@ export async function addCard(
   await boardCollection(boardType).add({ ...payload, pipelineId });
 }
 
+// Normaliza un contacto recibido en la carga masiva: todo dato faltante es null.
+function sanitizeContact(contact: Record<string, unknown> | null | undefined) {
+  const text = (value: unknown) =>
+    typeof value === "string" && value.trim() ? value.trim() : null;
+  return {
+    name: text(contact?.name),
+    role: text(contact?.role),
+    email: text(contact?.email),
+    countryCode: text(contact?.countryCode) ?? COUNTRY_CODES[0].code,
+    phone: text(contact?.phone),
+  };
+}
+
 export async function bulkAddCards(
   boardType: BoardType,
   pipelineId: string,
@@ -60,7 +73,7 @@ export async function bulkAddCards(
       columnId: item.columnId || "",
       createdAt: item.createdAt || new Date().toISOString(),
       comments: item.comments || [],
-      contact: item.contact || null,
+      contacts: Array.isArray(item.contacts) ? item.contacts.map(sanitizeContact) : [],
       status: item.status || null,
       pipelineId,
     });
@@ -81,6 +94,22 @@ export async function updateCard(
   if (!doc.exists || cardPipelineId(doc.data()!) !== pipelineId) return false;
   await docRef.update(toFirestoreUpdate(payload));
   return true;
+}
+
+// Borra todas las tarjetas de un pipeline en ambos tableros y devuelve cuántas
+// eran. where por un solo campo no requiere índice compuesto. No sirve para el
+// default: sus tarjetas antiguas no traen pipelineId.
+export async function deletePipelineCards(pipelineId: string) {
+  // BulkWriter reparte las escrituras en lotes y reintenta las que fallan.
+  const writer = adminDb.bulkWriter();
+  let deleted = 0;
+  for (const boardType of Object.keys(BOARD_COLLECTION) as BoardType[]) {
+    const snapshot = await boardCollection(boardType).where("pipelineId", "==", pipelineId).get();
+    snapshot.docs.forEach((doc) => writer.delete(doc.ref));
+    deleted += snapshot.size;
+  }
+  await writer.close();
+  return deleted;
 }
 
 // Devuelve false si la tarjeta no existe o es de otro pipeline.

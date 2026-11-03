@@ -105,12 +105,12 @@ export function Board({ boardType, pipeline }: { boardType: BoardType; pipeline:
       const currentSheet = {
         name: EXPORT_SHEET_NAME[boardType],
         headers: EXPORT_HEADERS,
-        rows: cardsToExportRows(filteredCards, columns),
+        rows: cardsToExportRows(filteredCards, columns, "excel"),
       };
       const otherSheet = {
         name: EXPORT_SHEET_NAME[otherBoardType],
         headers: EXPORT_HEADERS,
-        rows: cardsToExportRows(otherCards, BOARD_COLUMNS[otherBoardType]),
+        rows: cardsToExportRows(otherCards, BOARD_COLUMNS[otherBoardType], "excel"),
       };
       await exportSheetsToExcel({
         sheets: boardType === "negociaciones" ? [currentSheet, otherSheet] : [otherSheet, currentSheet],
