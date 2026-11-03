@@ -34,6 +34,9 @@ export function UserProfileModal({ rolUsuario, nombreUsuario }: UserProfileModal
   const [editPass, setEditPass] = useState("");
   const [editRol, setEditRol] = useState("visualizador");
 
+  // 🔥 Nuevo estado para controlar el modal de confirmación de borrado
+  const [usuarioAEliminar, setUsuarioAEliminar] = useState<UsuarioDB | null>(null);
+
   const puedeAdministrar = rolUsuario === "administrador" || rolUsuario === "superusuario";
 
   useEffect(() => {
@@ -115,21 +118,29 @@ export function UserProfileModal({ rolUsuario, nombreUsuario }: UserProfileModal
     }
   };
 
-  const handleEliminar = async (id: string) => {
-    if (!confirm("¿Seguro que deseas eliminar este usuario? Esta acción no se puede deshacer.")) return;
+  // 🔥 Nueva función para confirmar la eliminación sin usar el "alert" feo del navegador
+  const confirmarEliminacion = async () => {
+    if (!usuarioAEliminar) return;
+    setIsLoading(true);
+
     const res = await fetch("/api/usuarios", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
+      body: JSON.stringify({ id: usuarioAEliminar.id }),
     });
-    if (res.ok) cargarUsuarios();
+
+    if (res.ok) {
+      await cargarUsuarios();
+    }
+    setUsuarioAEliminar(null);
+    setIsLoading(false);
   };
 
   const cerrarModal = () => {
     setIsOpen(false);
     setTimeout(() => {
       setVista("perfil"); setMensaje(""); setNuevoUsuario(""); setPassword("");
-      setBusqueda(""); setFiltroRol("todos"); setUsuarioEditando(null);
+      setBusqueda(""); setFiltroRol("todos"); setUsuarioEditando(null); setUsuarioAEliminar(null);
     }, 300);
   };
 
@@ -145,8 +156,8 @@ export function UserProfileModal({ rolUsuario, nombreUsuario }: UserProfileModal
       </button>
 
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={cerrarModal}>
-          <div onClick={(e) => e.stopPropagation()} className="flex max-h-[85vh] w-full max-w-md flex-col rounded-xl border border-neutral-800 bg-neutral-950 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div onClick={(e) => e.stopPropagation()} className="flex max-h-[85vh] w-full max-w-md flex-col rounded-xl border border-neutral-800 bg-neutral-950 shadow-xl relative">
             
             <div className="flex items-start justify-between border-b border-neutral-800 px-5 py-4">
               <div className="flex-1">
@@ -191,16 +202,15 @@ export function UserProfileModal({ rolUsuario, nombreUsuario }: UserProfileModal
                 <div className="flex flex-col gap-4">
                   <div>
                     <label className="mb-1 block text-xs uppercase tracking-wide text-neutral-500">Nombre de Usuario</label>
-                    <input value={nuevoUsuario} onChange={(e) => setNuevoUsuario(e.target.value)} className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-sm text-neutral-100 outline-none focus:border-deinsa-orange" />
+                    <input value={nuevoUsuario} onChange={(e) => setNuevoUsuario(e.target.value)} placeholder="Ej. luis.umaña" className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-sm text-neutral-100 outline-none focus:border-deinsa-orange" />
                   </div>
                   <div>
                     <label className="mb-1 block text-xs uppercase tracking-wide text-neutral-500">Contraseña</label>
-                    <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-sm text-neutral-100 outline-none focus:border-deinsa-orange" />
+                    <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Ej. password123" className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-sm text-neutral-100 outline-none focus:border-deinsa-orange" />
                   </div>
                   <div>
                     <label className="mb-1 block text-xs uppercase tracking-wide text-neutral-500">Rol del Usuario</label>
                     <select value={rol} onChange={(e) => setRol(e.target.value)} className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-sm text-neutral-100 outline-none focus:border-deinsa-orange">
-                      {/* 🔥 Reordenado de mayor a menor jerarquía */}
                       {rolUsuario === "administrador" && (
                         <>
                           <option value="administrador">Administrador (Acceso Total)</option>
@@ -219,7 +229,6 @@ export function UserProfileModal({ rolUsuario, nombreUsuario }: UserProfileModal
                   <div className="flex gap-2">
                     <input type="text" placeholder="Buscar..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} className="flex-1 rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-sm text-neutral-100 outline-none focus:border-deinsa-orange" />
                     <select value={filtroRol} onChange={(e) => setFiltroRol(e.target.value)} className="w-36 rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-sm text-neutral-100 outline-none focus:border-deinsa-orange">
-                      {/* 🔥 Filtro de la lista también reordenado de mayor a menor */}
                       <option value="todos">Todos</option>
                       <option value="administrador">Administradores</option>
                       <option value="superusuario">Superusuarios</option>
@@ -239,9 +248,12 @@ export function UserProfileModal({ rolUsuario, nombreUsuario }: UserProfileModal
                             <p className="text-sm font-medium text-neutral-200 capitalize">{u.usuario}</p>
                             <p className="text-xs text-neutral-500 capitalize">{u.rol}</p>
                           </div>
-                          <div className="flex gap-3">
+                          <div className="flex gap-3 items-center">
                             <button onClick={() => abrirEdicion(u)} className="text-xs text-neutral-400 hover:text-deinsa-orange">Editar</button>
-                            <button onClick={() => handleEliminar(u.id)} className="text-xs text-neutral-500 hover:text-red-400">✕</button>
+                            {/* 🔥 Ahora este botón no borra directamente, sino que abre el nuevo modal interno */}
+                            <button onClick={() => setUsuarioAEliminar(u)} className="rounded-md border border-red-900/50 bg-red-950/30 px-2 py-1 text-xs text-red-500 hover:bg-red-900/50 hover:text-red-400 transition-colors">
+                              Borrar
+                            </button>
                           </div>
                         </div>
                       ))
@@ -258,12 +270,11 @@ export function UserProfileModal({ rolUsuario, nombreUsuario }: UserProfileModal
                   </div>
                   <div>
                     <label className="mb-1 block text-xs uppercase tracking-wide text-neutral-500">Nueva Contraseña <span className="lowercase text-neutral-600">(opcional)</span></label>
-                    <input type="password" value={editPass} onChange={(e) => setEditPass(e.target.value)} placeholder="En blanco = sin cambios" className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-sm text-neutral-100 outline-none focus:border-deinsa-orange" />
+                    <input type="password" value={editPass} onChange={(e) => setEditPass(e.target.value)} placeholder="Ej. password123" className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-sm text-neutral-100 outline-none focus:border-deinsa-orange" />
                   </div>
                   <div>
                     <label className="mb-1 block text-xs uppercase tracking-wide text-neutral-500">Rol del Usuario</label>
                     <select value={editRol} onChange={(e) => setEditRol(e.target.value)} className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-sm text-neutral-100 outline-none focus:border-deinsa-orange">
-                      {/* 🔥 Reordenado de mayor a menor jerarquía */}
                       {rolUsuario === "administrador" && (
                         <>
                           <option value="administrador">Administrador (Acceso Total)</option>
@@ -305,6 +316,34 @@ export function UserProfileModal({ rolUsuario, nombreUsuario }: UserProfileModal
                 </button>
               )}
             </div>
+            
+            {/* 🔥 NUEVO MODAL DE CONFIRMACIÓN DE ELIMINACIÓN SUPERPUESTO */}
+            {usuarioAEliminar && (
+              <div className="absolute inset-0 z-50 flex items-center justify-center rounded-xl bg-black/80 p-6 backdrop-blur-sm">
+                <div className="flex w-full flex-col rounded-lg border border-neutral-700 bg-neutral-900 p-5 shadow-2xl">
+                  <h3 className="mb-2 text-base font-bold text-white">¿Eliminar a este usuario?</h3>
+                  <p className="mb-6 text-sm text-neutral-400">
+                    Estás a punto de borrar a <span className="font-bold text-white">{usuarioAEliminar.usuario}</span>. Esta acción no se puede deshacer.
+                  </p>
+                  <div className="flex justify-end gap-3">
+                    <button
+                      onClick={() => setUsuarioAEliminar(null)}
+                      disabled={isLoading}
+                      className="rounded-md border border-neutral-600 px-4 py-1.5 text-sm text-neutral-300 hover:bg-neutral-800 transition"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={confirmarEliminacion}
+                      disabled={isLoading}
+                      className="rounded-md bg-red-600 px-4 py-1.5 text-sm font-bold text-white hover:bg-red-700 transition disabled:opacity-50"
+                    >
+                      {isLoading ? "Borrando..." : "Sí, borrar"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
             
           </div>
         </div>
