@@ -11,7 +11,7 @@ import { UserProfileModal } from "./UserProfileModal";
 const TABS: BoardType[] = ["negociaciones", "alianzas"];
 
 interface NavbarProps {
-  rolUsuario?: string; // 🔥 Cambiado de esSuperAdmin a rolUsuario
+  rolUsuario?: string; 
   nombreUsuario?: string;
 }
 
@@ -21,10 +21,10 @@ export function Navbar({ rolUsuario = "visualizador", nombreUsuario = "" }: Navb
   const params = useParams<{ pipeline?: string }>();
   const pipelineId = params.pipeline ?? DEFAULT_PIPELINE.id;
 
-  // 🔥 Calculamos si tiene permisos para crear pipelines
-  const puedeAdministrar = rolUsuario === "administrador" || rolUsuario === "superusuario";
-  // Eliminar pipelines queda reservado al administrador.
-  const puedeEliminar = rolUsuario === "administrador";
+  // Ambos pueden administrar (crear/renombrar)
+  const puedeAdministrar = rolUsuario === "administrador" || rolUsuario === "usuario";
+  // Solo el administrador maestro puede borrar pipelines
+  const puedeBorrar = rolUsuario === "administrador";
 
   useEffect(() => {
     if (pathname === "/login") return;
@@ -67,13 +67,17 @@ export function Navbar({ rolUsuario = "visualizador", nombreUsuario = "" }: Navb
     <header className="border-b border-neutral-800 bg-neutral-950">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
         
-        {/* PARTE IZQUIERDA */}
         <div className="flex items-center gap-8">
           <span className="text-lg font-bold tracking-wide text-neutral-100">
             DEINSA <span className="text-deinsa-orange">CRM</span>
           </span>
           
-          <PipelineSelector currentPipelineId={pipelineId} canManage={puedeAdministrar} canDelete={puedeEliminar} />
+          {/* 🔥 CORRECCIÓN: Se cambiaron las propiedades a canManage y canDelete según el error */}
+          <PipelineSelector 
+            currentPipelineId={pipelineId} 
+            canManage={puedeAdministrar} 
+            canDelete={puedeBorrar} 
+          />
           
           <nav className="flex gap-6">
             {TABS.map((boardType) => {
@@ -96,10 +100,7 @@ export function Navbar({ rolUsuario = "visualizador", nombreUsuario = "" }: Navb
           </nav>
         </div>
 
-        {/* PARTE DERECHA: Perfil Clickable y Cerrar Sesión */}
         <div className="flex items-center gap-4">
-          
-          {/* 🔥 Pasamos rolUsuario en lugar de esSuperAdmin */}
           <UserProfileModal rolUsuario={rolUsuario} nombreUsuario={nombreUsuario} />
           
           <button 

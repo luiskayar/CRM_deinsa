@@ -19,7 +19,8 @@ async function getSession() {
   }
 }
 
-const puedeAdministrar = (rol: string) => ["administrador", "superusuario"].includes(rol);
+// 🔥 CAMBIO: Ahora SOLO el "administrador" puede gestionar la base de usuarios
+const puedeAdministrar = (rol: string) => rol === "administrador";
 
 export async function POST(req: Request) {
   try {
@@ -29,12 +30,6 @@ export async function POST(req: Request) {
     }
 
     const { nuevoUsuario, password, rol } = await req.json();
-
-    // 🔥 REGLA: Los superusuarios solo pueden crear visualizadores.
-    // Si la sesión es de Administrador, pasará libremente y creará cualquier rol.
-    if (session.rol === "superusuario" && rol !== "visualizador") {
-      return NextResponse.json({ error: "Solo el administrador puede crear roles superiores." }, { status: 403 });
-    }
 
     const existe = await adminDb.collection("usuarios").where("usuario", "==", nuevoUsuario).get();
     if (!existe.empty) return NextResponse.json({ error: "El usuario ya existe" }, { status: 400 });
@@ -62,13 +57,7 @@ export async function GET() {
       return NextResponse.json({ error: "No autorizado" }, { status: 403 });
     }
 
-    let snapshot;
-    if (session.rol === "administrador") {
-      snapshot = await adminDb.collection("usuarios").get();
-    } else {
-      snapshot = await adminDb.collection("usuarios").where("creadoPor", "==", session.usuario).get();
-    }
-    
+    const snapshot = await adminDb.collection("usuarios").get();
     const usuarios = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     usuarios.sort((a: any, b: any) => new Date(b.fechaCreacion).getTime() - new Date(a.fechaCreacion).getTime());
     
@@ -84,10 +73,6 @@ export async function PUT(req: Request) {
     if (!session || !puedeAdministrar(session.rol as string)) return NextResponse.json({ error: "No autorizado" }, { status: 403 });
 
     const { id, usuario, password, rol } = await req.json();
-
-    if (session.rol === "superusuario" && rol !== "visualizador") {
-      return NextResponse.json({ error: "No tienes permiso para asignar este rol." }, { status: 403 });
-    }
 
     const query = await adminDb.collection("usuarios").where("usuario", "==", usuario).get();
     const conflict = query.docs.find(doc => doc.id !== id);
