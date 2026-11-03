@@ -11,7 +11,7 @@ export async function GET() {
   }
 }
 
-// Solo administradores y superusuarios (5.2.2).
+// Solo administradores y usuarios (5.2.2).
 export async function POST(req: Request) {
   try {
     const user = await getAdminUser();

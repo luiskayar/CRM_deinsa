@@ -26,7 +26,7 @@ export function PipelineSelector({
   canDelete,
 }: {
   currentPipelineId: string;
-  /** Crear y renombrar pipelines: administradores y superusuarios (5.2.2). */
+  /** Crear y renombrar pipelines: administradores y usuarios (5.2.2). */
   canManage: boolean;
   /** Eliminar pipelines: solo administradores. */
   canDelete: boolean;

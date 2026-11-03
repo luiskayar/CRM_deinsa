@@ -4,7 +4,7 @@ import { deletePipeline, renamePipeline } from "@/lib/server/pipelines";
 
 const FORBIDDEN = { error: "No tienes permisos para modificar pipelines." };
 
-// Renombrar (solo administradores y superusuarios, 5.2.2).
+// Renombrar (solo administradores y usuarios, 5.2.2).
 export async function PATCH(req: Request, ctx: RouteContext<"/api/pipelines/[id]">) {
   try {
     const user = await getAdminUser();
