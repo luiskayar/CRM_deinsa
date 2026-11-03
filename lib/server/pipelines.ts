@@ -7,14 +7,14 @@ import {
   RESERVED_PIPELINE_SLUGS,
 } from "@/lib/constants";
 import { pipelineSlug } from "@/lib/pipeline";
+import { deletePipelineCards } from "@/lib/server/board";
 import { Pipeline } from "@/lib/types";
 
 // Único punto de acceso a Firestore para pipelines: al migrar a la BD en PHP
 // (5.2.4) solo cambia este archivo.
 //
-// Eliminar un pipeline lo archiva (deletedAt): deja de listarse y su URL da
-// 404, pero el documento y sus tarjetas se conservan. Para recuperarlo basta
-// con quitar deletedAt desde la consola de Firebase.
+// Eliminar un pipeline lo borra por completo junto con sus tarjetas; queda
+// constancia en logs_auditoria.
 
 // Código gRPC que devuelve Firestore cuando .create() choca con un id existente.
 const ALREADY_EXISTS = 6;
@@ -27,15 +27,14 @@ function toPipeline(id: string, data: FirebaseFirestore.DocumentData): Pipeline 
 
 export async function listPipelines(): Promise<Pipeline[]> {
   const snapshot = await pipelinesCollection().orderBy("createdAt", "asc").get();
-  const active = snapshot.docs.filter((doc) => !doc.data().deletedAt);
-  return [DEFAULT_PIPELINE, ...active.map((doc) => toPipeline(doc.id, doc.data()))];
+  return [DEFAULT_PIPELINE, ...snapshot.docs.map((doc) => toPipeline(doc.id, doc.data()))];
 }
 
 // cache(): las consultas repetidas dentro de un mismo request se hacen una vez.
 export const getPipeline = cache(async (id: string): Promise<Pipeline | null> => {
   if (id === DEFAULT_PIPELINE.id) return DEFAULT_PIPELINE;
   const doc = await pipelinesCollection().doc(id).get();
-  if (!doc.exists || doc.data()!.deletedAt) return null;
+  if (!doc.exists) return null;
   return toPipeline(doc.id, doc.data()!);
 });
 
@@ -80,8 +79,7 @@ function validateName(rawName: unknown): { name: string; slug: string } | Failur
 }
 
 // Un nombre está ocupado si su slug coincide con el id o con el nombre de otro
-// pipeline (incluidos los archivados, para poder restaurarlos sin choques).
-// Comparar nombres importa porque renombrar no cambia el id.
+// pipeline. Comparar nombres importa porque renombrar no cambia el id.
 async function isNameTaken(slug: string, exceptId?: string) {
   if (RESERVED_PIPELINE_SLUGS.has(slug) || slug === pipelineSlug(DEFAULT_PIPELINE.name)) {
     return true;
@@ -136,14 +134,23 @@ export async function renamePipeline(
   return { ok: true, pipeline: { ...current, name: validated.name } };
 }
 
-export async function archivePipeline(id: string, deletedBy: string): Promise<PipelineResult> {
+// Irreversible. Primero se borra el pipeline para que /api/board rechace
+// nuevas tarjetas en él, y después sus tarjetas; así el nombre queda libre
+// sin que un pipeline nuevo con el mismo id herede datos.
+export async function deletePipeline(id: string, deletedBy: string): Promise<PipelineResult> {
   if (id === DEFAULT_PIPELINE.id) return DEFAULT_LOCKED;
   const current = await getPipeline(id);
   if (!current) return NOT_FOUND;
 
-  await pipelinesCollection().doc(id).update({
-    deletedAt: new Date().toISOString(),
-    deletedBy,
+  await pipelinesCollection().doc(id).delete();
+  const deletedCards = await deletePipelineCards(id);
+  await adminDb.collection("logs_auditoria").add({
+    evento: "PIPELINE_ELIMINADO",
+    fecha: new Date().toISOString(),
+    usuario: deletedBy,
+    pipelineId: id,
+    pipelineNombre: current.name,
+    tarjetasEliminadas: deletedCards,
   });
   return { ok: true, pipeline: current };
 }

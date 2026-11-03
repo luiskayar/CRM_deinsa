@@ -365,9 +365,9 @@ export function PipelineSelector({
               Eliminar &quot;{toDelete.name}&quot;
             </h2>
             <p className="mt-2 text-sm text-neutral-400">
-              El pipeline y todas sus negociaciones y aliados dejarán de verse en el CRM para
-              todos los usuarios. La información no se borra: queda archivada y puede
-              recuperarse desde la base de datos.
+              Se borrarán de forma permanente el pipeline y todas sus negociaciones y
+              alianzas, para todos los usuarios.{" "}
+              <span className="font-semibold text-red-400">Esta acción no se puede deshacer.</span>
             </p>
             {error && <p className="mt-3 text-xs text-red-400">{error}</p>}
             <div className="mt-5 flex justify-end gap-2">

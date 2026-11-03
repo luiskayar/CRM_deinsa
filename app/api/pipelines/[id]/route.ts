@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAdministrador, getAdminUser } from "@/lib/server/auth";
-import { archivePipeline, renamePipeline } from "@/lib/server/pipelines";
+import { deletePipeline, renamePipeline } from "@/lib/server/pipelines";
 
 const FORBIDDEN = { error: "No tienes permisos para modificar pipelines." };
 
@@ -23,7 +23,7 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/pipelines/[id]
   }
 }
 
-// Eliminar = archivar (solo el administrador). Ver lib/server/pipelines.ts.
+// Eliminar de forma definitiva, con sus tarjetas (solo el administrador).
 export async function DELETE(_req: Request, ctx: RouteContext<"/api/pipelines/[id]">) {
   try {
     const user = await getAdministrador();
@@ -35,7 +35,7 @@ export async function DELETE(_req: Request, ctx: RouteContext<"/api/pipelines/[i
     }
 
     const { id } = await ctx.params;
-    const result = await archivePipeline(id, user.usuario);
+    const result = await deletePipeline(id, user.usuario);
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: result.status });
     }

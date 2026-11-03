@@ -12,6 +12,10 @@ function createCommentId() {
 // El pipeline dejó de existir (otro administrador lo eliminó).
 class PipelineNotFoundError extends Error {}
 
+// La sesión terminó (cierre de sesión en otra pestaña o mientras el tablero
+// seguía consultando la API): el proxy responde 401.
+class SessionEndedError extends Error {}
+
 // Lectura puntual a través de tu propia API segura (para exportar a Excel)
 export async function fetchBoardCards(
   boardType: BoardType,
@@ -20,7 +24,8 @@ export async function fetchBoardCards(
   const params = new URLSearchParams({ type: boardType, pipeline: pipelineId });
   const res = await fetch(`/api/board?${params}`);
   if (res.status === 404) throw new PipelineNotFoundError("Pipeline no encontrado");
-  if (!res.ok) throw new Error("Error fetching board");
+  if (res.status === 401) throw new SessionEndedError("Sesión terminada");
+  if (!res.ok) throw new Error(`Error fetching board (HTTP ${res.status})`);
   return await res.json();
 }
 
@@ -38,6 +43,10 @@ export function useBoard(boardType: BoardType, pipelineId: string) {
     } catch (err: unknown) {
       if (err instanceof PipelineNotFoundError) {
         router.replace(`/${DEFAULT_PIPELINE.id}/${boardType}`);
+        return;
+      }
+      if (err instanceof SessionEndedError) {
+        router.replace("/login");
         return;
       }
       console.error(err);
