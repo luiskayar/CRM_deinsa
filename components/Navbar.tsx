@@ -1,4 +1,3 @@
-// components/Navbar.tsx
 "use client";
 
 import Link from "next/link";
@@ -7,20 +6,25 @@ import { useEffect } from "react";
 import { BOARD_LABELS, DEFAULT_PIPELINE } from "@/lib/constants";
 import { BoardType } from "@/lib/types";
 import { PipelineSelector } from "./PipelineSelector";
-import { UserProfileModal } from "./UserProfileModal"; // 🔥 Importamos el nuevo modal
+import { UserProfileModal } from "./UserProfileModal";
 
 const TABS: BoardType[] = ["negociaciones", "alianzas"];
 
 interface NavbarProps {
-  esSuperAdmin?: boolean;
+  rolUsuario?: string; // 🔥 Cambiado de esSuperAdmin a rolUsuario
   nombreUsuario?: string;
 }
 
-export function Navbar({ esSuperAdmin = false, nombreUsuario = "" }: NavbarProps) {
+export function Navbar({ rolUsuario = "visualizador", nombreUsuario = "" }: NavbarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const params = useParams<{ pipeline?: string }>();
   const pipelineId = params.pipeline ?? DEFAULT_PIPELINE.id;
+
+  // 🔥 Calculamos si tiene permisos para crear pipelines
+  const puedeAdministrar = rolUsuario === "administrador" || rolUsuario === "superusuario";
+  // Eliminar pipelines queda reservado al administrador.
+  const puedeEliminar = rolUsuario === "administrador";
 
   useEffect(() => {
     if (pathname === "/login") return;
@@ -69,7 +73,7 @@ export function Navbar({ esSuperAdmin = false, nombreUsuario = "" }: NavbarProps
             DEINSA <span className="text-deinsa-orange">CRM</span>
           </span>
           
-          <PipelineSelector currentPipelineId={pipelineId} canManage={esSuperAdmin} />
+          <PipelineSelector currentPipelineId={pipelineId} canManage={puedeAdministrar} canDelete={puedeEliminar} />
           
           <nav className="flex gap-6">
             {TABS.map((boardType) => {
@@ -95,8 +99,8 @@ export function Navbar({ esSuperAdmin = false, nombreUsuario = "" }: NavbarProps
         {/* PARTE DERECHA: Perfil Clickable y Cerrar Sesión */}
         <div className="flex items-center gap-4">
           
-          {/* 🔥 Aquí colocamos el nuevo componente. Se comporta como botón y como modal al mismo tiempo */}
-          <UserProfileModal esSuperAdmin={esSuperAdmin} nombreUsuario={nombreUsuario} />
+          {/* 🔥 Pasamos rolUsuario en lugar de esSuperAdmin */}
+          <UserProfileModal rolUsuario={rolUsuario} nombreUsuario={nombreUsuario} />
           
           <button 
             onClick={handleLogout}

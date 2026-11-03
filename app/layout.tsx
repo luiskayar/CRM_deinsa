@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Navbar } from "@/components/Navbar";
-import { getUserInfo } from "@/lib/server/auth"; // 🔥 Importamos nuestra función de autenticación
+import { getUserInfo } from "@/lib/server/auth";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -19,14 +19,13 @@ export const metadata: Metadata = {
   description: "CRM interno de Deinsa: negociaciones y alianzas",
 };
 
-// 🔥 Hacemos el layout asíncrono (async) para poder leer las credenciales
 export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   
-  // 🔥 Obtenemos la información de la sesión
   const userInfo = await getUserInfo();
-  const esSuperAdmin = userInfo?.rol === "superusuario";
+  // 🔥 Extraemos el rol exacto ("administrador", "superusuario" o "visualizador")
+  const rolUsuario = userInfo?.rol || "visualizador";
   const nombreUsuario = userInfo?.usuario || "";
 
   return (
@@ -36,8 +35,8 @@ export default async function RootLayout({
     >
       <body className="flex h-dvh flex-col overflow-hidden bg-neutral-950">
         
-        {/* 🔥 Le inyectamos los datos al Navbar para que los muestre */}
-        <Navbar esSuperAdmin={esSuperAdmin} nombreUsuario={nombreUsuario} />
+        {/* 🔥 Le inyectamos el nuevo prop de rolUsuario al Navbar */}
+        <Navbar rolUsuario={rolUsuario} nombreUsuario={nombreUsuario} />
         
         <main className="flex min-h-0 min-w-0 flex-1 flex-col">{children}</main>
       </body>

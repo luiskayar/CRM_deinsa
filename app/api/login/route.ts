@@ -25,14 +25,12 @@ export async function POST(req: Request) {
     let usuarioValido = false;
     let rol = "visualizador"; 
 
-    // 1. PRIMERO BUSCAMOS EN FIREBASE (Cuentas creadas después)
+    // 1. PRIMERO BUSCAMOS EN FIREBASE
     const userDocRef = adminDb.collection("usuarios").where("usuario", "==", usuario);
     const userSnapshot = await userDocRef.get();
     
     if (!userSnapshot.empty) {
       const userData = userSnapshot.docs[0].data();
-      
-      // 🔥 Comparamos la contraseña en texto plano con el hash guardado en Firebase
       const match = await bcrypt.compare(password, userData.password);
       
       if (match) {
@@ -40,13 +38,13 @@ export async function POST(req: Request) {
         rol = userData.rol;
       }
     } 
-    // 2. SI NO ESTÁ EN FIREBASE, VERIFICAMOS LA CUENTA MAESTRA DEL .ENV
+    // 🔥 2. EL CAMBIO ESTÁ AQUÍ: La cuenta maestra ahora es "administrador"
     else if (usuario === process.env.CRM_USUARIO && password === process.env.CRM_PASSWORD) {
       usuarioValido = true;
-      rol = "superusuario";
+      rol = "administrador";
     }
 
-    // 3. SI ALGUNA DE LAS DOS FUE CORRECTA, LE DAMOS ACCESO
+    // 3. SI ALGUNA FUE CORRECTA
     if (usuarioValido) {
       if (ipDoc.exists) await ipRef.delete();
       
@@ -78,7 +76,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, rol }, { status: 200 });
     }
 
-    // SI LA CONTRASEÑA FUE INCORRECTA
     intentos += 1;
     let nuevoBloqueo = intentos >= 5 ? Date.now() + 900000 : 0;
     await ipRef.set({ intentos, bloqueadoHasta: nuevoBloqueo });
@@ -96,7 +93,6 @@ export async function POST(req: Request) {
       { status: intentos >= 5 ? 429 : 401 }
     );
   } catch (error) {
-    console.error("Error en login:", error);
     return NextResponse.json({ error: "Error en el servidor" }, { status: 500 });
   }
 }

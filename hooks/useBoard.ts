@@ -9,7 +9,7 @@ function createCommentId() {
   return `comment-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-// El pipeline dejó de existir (otro superusuario lo eliminó).
+// El pipeline dejó de existir (otro administrador lo eliminó).
 class PipelineNotFoundError extends Error {}
 
 // Lectura puntual a través de tu propia API segura (para exportar a Excel)

@@ -1,4 +1,3 @@
-// components/CreateUserModal.tsx
 "use client";
 
 import { useState } from "react";
@@ -14,7 +13,6 @@ export function CreateUserModal() {
     e.preventDefault();
     setMensaje("Creando...");
 
-    // Llama al API que creamos en el paso anterior
     const res = await fetch("/api/usuarios", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -26,7 +24,6 @@ export function CreateUserModal() {
       setMensaje("¡Usuario creado con éxito!");
       setNuevoUsuario("");
       setPassword("");
-      // Cerrar el modal después de 2 segundos
       setTimeout(() => setIsOpen(false), 2000);
     } else {
       setMensaje(data.error || "Error al crear usuario");
@@ -62,7 +59,7 @@ export function CreateUserModal() {
               <div>
                 <label className="text-sm text-neutral-400">Contraseña</label>
                 <input
-                  type="text" // Puede ser password, pero a veces es útil ver qué clave le estás asignando
+                  type="text" 
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -77,8 +74,10 @@ export function CreateUserModal() {
                   onChange={(e) => setRol(e.target.value)}
                   className="w-full rounded bg-neutral-800 p-2 text-white outline-none focus:ring-1 focus:ring-deinsa-orange"
                 >
-                  <option value="visualizador">Visualizador (Solo lectura)</option>
+                  {/* 🔥 Reordenado de mayor a menor jerarquía */}
+                  <option value="administrador">Administrador (Acceso Maestro)</option>
                   <option value="superusuario">Superusuario (Acceso total)</option>
+                  <option value="visualizador">Visualizador (Solo lectura)</option>
                 </select>
               </div>
 

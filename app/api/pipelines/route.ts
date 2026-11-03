@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSuperuser } from "@/lib/server/auth";
+import { getAdminUser } from "@/lib/server/auth";
 import { createPipeline, listPipelines } from "@/lib/server/pipelines";
 
 export async function GET() {
@@ -11,12 +11,12 @@ export async function GET() {
   }
 }
 
-// Solo superusuarios (5.2.2).
+// Solo administradores y superusuarios (5.2.2).
 export async function POST(req: Request) {
   try {
-    const user = await getSuperuser();
+    const user = await getAdminUser();
     if (!user) {
-      return NextResponse.json({ error: "Solo un superusuario puede crear pipelines." }, { status: 403 });
+      return NextResponse.json({ error: "No tienes permisos para crear pipelines." }, { status: 403 });
     }
 
     const { name } = await req.json();

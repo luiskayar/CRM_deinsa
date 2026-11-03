@@ -23,10 +23,13 @@ async function readError(res: Response, fallback: string) {
 export function PipelineSelector({
   currentPipelineId,
   canManage,
+  canDelete,
 }: {
   currentPipelineId: string;
-  /** Crear, renombrar y eliminar pipelines: solo superusuarios (5.2.2). */
+  /** Crear y renombrar pipelines: administradores y superusuarios (5.2.2). */
   canManage: boolean;
+  /** Eliminar pipelines: solo administradores. */
+  canDelete: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -82,7 +85,7 @@ export function PipelineSelector({
     if (open) {
       close();
     } else {
-      // Se recarga al abrir para ver los cambios de otros superusuarios.
+      // Se recarga al abrir para ver los cambios de otros administradores.
       loadPipelines();
       setOpen(true);
     }
@@ -269,18 +272,20 @@ export function PipelineSelector({
                       >
                         ✎
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setError(null);
-                          setToDelete(pipeline);
-                        }}
-                        aria-label={`Eliminar ${pipeline.name}`}
-                        title="Eliminar"
-                        className="rounded px-1.5 py-0.5 text-xs text-neutral-400 hover:bg-red-950 hover:text-red-400"
-                      >
-                        ✕
-                      </button>
+                      {canDelete && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setError(null);
+                            setToDelete(pipeline);
+                          }}
+                          aria-label={`Eliminar ${pipeline.name}`}
+                          title="Eliminar"
+                          className="rounded px-1.5 py-0.5 text-xs text-neutral-400 hover:bg-red-950 hover:text-red-400"
+                        >
+                          ✕
+                        </button>
+                      )}
                     </div>
                   )}
                 </li>
