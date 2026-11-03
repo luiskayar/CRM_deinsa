@@ -11,31 +11,56 @@ import { Pipeline } from "@/lib/types";
 
 // Único punto de acceso a Firestore para pipelines: al migrar a la BD en PHP
 // (5.2.4) solo cambia este archivo.
+//
+// Eliminar un pipeline lo archiva (deletedAt): deja de listarse y su URL da
+// 404, pero el documento y sus tarjetas se conservan. Para recuperarlo basta
+// con quitar deletedAt desde la consola de Firebase.
 
 // Código gRPC que devuelve Firestore cuando .create() choca con un id existente.
 const ALREADY_EXISTS = 6;
+
+const pipelinesCollection = () => adminDb.collection(PIPELINE_COLLECTION);
 
 function toPipeline(id: string, data: FirebaseFirestore.DocumentData): Pipeline {
   return { id, name: data.name, createdAt: data.createdAt };
 }
 
 export async function listPipelines(): Promise<Pipeline[]> {
-  const snapshot = await adminDb.collection(PIPELINE_COLLECTION).orderBy("createdAt", "asc").get();
-  return [DEFAULT_PIPELINE, ...snapshot.docs.map((doc) => toPipeline(doc.id, doc.data()))];
+  const snapshot = await pipelinesCollection().orderBy("createdAt", "asc").get();
+  const active = snapshot.docs.filter((doc) => !doc.data().deletedAt);
+  return [DEFAULT_PIPELINE, ...active.map((doc) => toPipeline(doc.id, doc.data()))];
 }
 
-// cache(): el layout y la página de un mismo request lo consultan una sola vez.
+// cache(): las consultas repetidas dentro de un mismo request se hacen una vez.
 export const getPipeline = cache(async (id: string): Promise<Pipeline | null> => {
   if (id === DEFAULT_PIPELINE.id) return DEFAULT_PIPELINE;
-  const doc = await adminDb.collection(PIPELINE_COLLECTION).doc(id).get();
-  return doc.exists ? toPipeline(doc.id, doc.data()!) : null;
+  const doc = await pipelinesCollection().doc(id).get();
+  if (!doc.exists || doc.data()!.deletedAt) return null;
+  return toPipeline(doc.id, doc.data()!);
 });
 
-export type CreatePipelineResult =
+export type PipelineResult =
   | { ok: true; pipeline: Pipeline }
   | { ok: false; status: number; error: string };
 
-export async function createPipeline(rawName: unknown): Promise<CreatePipelineResult> {
+type Failure = Extract<PipelineResult, { ok: false }>;
+
+const DUPLICATE_NAME: Failure = {
+  ok: false,
+  status: 409,
+  error: "Ya existe un pipeline con ese nombre.",
+};
+
+const NOT_FOUND: Failure = { ok: false, status: 404, error: "Pipeline no encontrado." };
+
+const DEFAULT_LOCKED: Failure = {
+  ok: false,
+  status: 400,
+  error: `"${DEFAULT_PIPELINE.name}" es el pipeline por defecto y no se puede modificar.`,
+};
+
+// Devuelve el nombre limpio y su slug, o el error de validación.
+function validateName(rawName: unknown): { name: string; slug: string } | Failure {
   const name = typeof rawName === "string" ? rawName.trim() : "";
   if (!name) {
     return { ok: false, status: 400, error: "El nombre del pipeline es obligatorio." };
@@ -47,26 +72,78 @@ export async function createPipeline(rawName: unknown): Promise<CreatePipelineRe
       error: `El nombre no puede superar ${PIPELINE_NAME_MAX_LENGTH} caracteres.`,
     };
   }
-
-  const id = pipelineSlug(name);
-  if (!id) {
+  const slug = pipelineSlug(name);
+  if (!slug) {
     return { ok: false, status: 400, error: "El nombre debe incluir letras o números." };
   }
-  if (RESERVED_PIPELINE_SLUGS.has(id)) {
-    return { ok: false, status: 409, error: "Ya existe un pipeline con ese nombre." };
-  }
+  return { name, slug };
+}
 
-  const pipeline: Pipeline = { id, name, createdAt: new Date().toISOString() };
+// Un nombre está ocupado si su slug coincide con el id o con el nombre de otro
+// pipeline (incluidos los archivados, para poder restaurarlos sin choques).
+// Comparar nombres importa porque renombrar no cambia el id.
+async function isNameTaken(slug: string, exceptId?: string) {
+  if (RESERVED_PIPELINE_SLUGS.has(slug) || slug === pipelineSlug(DEFAULT_PIPELINE.name)) {
+    return true;
+  }
+  const snapshot = await pipelinesCollection().get();
+  return snapshot.docs.some(
+    (doc) => doc.id !== exceptId && (doc.id === slug || pipelineSlug(doc.data().name) === slug)
+  );
+}
+
+export async function createPipeline(rawName: unknown, createdBy: string): Promise<PipelineResult> {
+  const validated = validateName(rawName);
+  if ("ok" in validated) return validated;
+  if (await isNameTaken(validated.slug)) return DUPLICATE_NAME;
+
+  const pipeline: Pipeline = {
+    id: validated.slug,
+    name: validated.name,
+    createdAt: new Date().toISOString(),
+  };
   try {
-    await adminDb
-      .collection(PIPELINE_COLLECTION)
-      .doc(id)
-      .create({ name: pipeline.name, createdAt: pipeline.createdAt });
+    await pipelinesCollection()
+      .doc(pipeline.id)
+      .create({ name: pipeline.name, createdAt: pipeline.createdAt, createdBy });
   } catch (error) {
-    if ((error as { code?: number }).code === ALREADY_EXISTS) {
-      return { ok: false, status: 409, error: "Ya existe un pipeline con ese nombre." };
-    }
+    if ((error as { code?: number }).code === ALREADY_EXISTS) return DUPLICATE_NAME;
     throw error;
   }
   return { ok: true, pipeline };
+}
+
+// Solo cambia el nombre: el id (y por lo tanto la URL y el pipelineId de las
+// tarjetas) se mantiene.
+export async function renamePipeline(
+  id: string,
+  rawName: unknown,
+  updatedBy: string
+): Promise<PipelineResult> {
+  if (id === DEFAULT_PIPELINE.id) return DEFAULT_LOCKED;
+  const current = await getPipeline(id);
+  if (!current) return NOT_FOUND;
+
+  const validated = validateName(rawName);
+  if ("ok" in validated) return validated;
+  if (await isNameTaken(validated.slug, id)) return DUPLICATE_NAME;
+
+  await pipelinesCollection().doc(id).update({
+    name: validated.name,
+    updatedAt: new Date().toISOString(),
+    updatedBy,
+  });
+  return { ok: true, pipeline: { ...current, name: validated.name } };
+}
+
+export async function archivePipeline(id: string, deletedBy: string): Promise<PipelineResult> {
+  if (id === DEFAULT_PIPELINE.id) return DEFAULT_LOCKED;
+  const current = await getPipeline(id);
+  if (!current) return NOT_FOUND;
+
+  await pipelinesCollection().doc(id).update({
+    deletedAt: new Date().toISOString(),
+    deletedBy,
+  });
+  return { ok: true, pipeline: current };
 }

@@ -19,3 +19,10 @@ export async function getUserInfo() {
     return null;
   }
 }
+
+// Devuelve la sesión solo si es de un superusuario; null en cualquier otro
+// caso (sin sesión, visualizador o sesión anterior a los roles, sin rol).
+export async function getSuperuser() {
+  const user = await getUserInfo();
+  return user?.rol === "superusuario" ? user : null;
+}

@@ -1,11 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { DEFAULT_PIPELINE } from "@/lib/constants";
 import { BoardType, CardItem, Comment, Contact, NegotiationStatus } from "@/lib/types";
 
 function createCommentId() {
   return `comment-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
+
+// El pipeline dejó de existir (otro superusuario lo eliminó).
+class PipelineNotFoundError extends Error {}
 
 // Lectura puntual a través de tu propia API segura (para exportar a Excel)
 export async function fetchBoardCards(
@@ -14,11 +19,13 @@ export async function fetchBoardCards(
 ): Promise<CardItem[]> {
   const params = new URLSearchParams({ type: boardType, pipeline: pipelineId });
   const res = await fetch(`/api/board?${params}`);
+  if (res.status === 404) throw new PipelineNotFoundError("Pipeline no encontrado");
   if (!res.ok) throw new Error("Error fetching board");
   return await res.json();
 }
 
 export function useBoard(boardType: BoardType, pipelineId: string) {
+  const router = useRouter();
   const [cards, setCards] = useState<CardItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -29,12 +36,16 @@ export function useBoard(boardType: BoardType, pipelineId: string) {
       setCards(data);
       setError(null);
     } catch (err: unknown) {
+      if (err instanceof PipelineNotFoundError) {
+        router.replace(`/${DEFAULT_PIPELINE.id}/${boardType}`);
+        return;
+      }
       console.error(err);
       setError(err instanceof Error ? err.message : "Error desconocido");
     } finally {
       setLoading(false);
     }
-  }, [boardType, pipelineId]);
+  }, [boardType, pipelineId, router]);
 
   // Simulamos el tiempo real consultando la API de forma segura
   useEffect(() => {

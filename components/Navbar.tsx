@@ -69,7 +69,7 @@ export function Navbar({ esSuperAdmin = false, nombreUsuario = "" }: NavbarProps
             DEINSA <span className="text-deinsa-orange">CRM</span>
           </span>
           
-          <PipelineSelector currentPipelineId={pipelineId} canCreate={esSuperAdmin} />
+          <PipelineSelector currentPipelineId={pipelineId} canManage={esSuperAdmin} />
           
           <nav className="flex gap-6">
             {TABS.map((boardType) => {
