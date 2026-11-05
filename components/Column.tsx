@@ -13,6 +13,7 @@ export function Column({
   newItemLabel,
   onCardClick,
   onAddCard,
+  puedeEditar = true, 
 }: {
   column: ColumnType;
   cards: CardItem[];
@@ -20,8 +21,9 @@ export function Column({
   newItemLabel: string;
   onCardClick: (cardId: string) => void;
   onAddCard: (name: string) => void;
+  puedeEditar?: boolean;
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: column.id });
+  const { setNodeRef, isOver } = useDroppable({ id: column.id, disabled: !puedeEditar });
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
   const accent = COLUMN_ACCENT_CLASSES[COLUMN_ACCENT[column.id] ?? "neutral"];
@@ -60,50 +62,53 @@ export function Column({
         ))}
       </div>
 
-      <div className="border-t border-neutral-800 p-2.5">
-        {adding ? (
-          <div className="flex flex-col gap-2">
-            <input
-              autoFocus
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") submit();
-                if (e.key === "Escape") {
-                  setAdding(false);
-                  setName("");
-                }
-              }}
-              placeholder={`Nombre de ${itemLabel}`}
-              className="rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-sm text-neutral-100 outline-none focus:border-deinsa-orange"
-            />
-            <div className="flex gap-2">
-              <button
-                onClick={submit}
-                className="flex-1 rounded-md bg-deinsa-orange px-2 py-1.5 text-xs font-semibold text-neutral-950 hover:bg-deinsa-orange-dark hover:text-neutral-100"
-              >
-                Agregar
-              </button>
-              <button
-                onClick={() => {
-                  setAdding(false);
-                  setName("");
+      {/* 🔥 Esto oculta el botón de agregar tarjeta al final de la columna si es visualizador */}
+      {puedeEditar && (
+        <div className="border-t border-neutral-800 p-2.5">
+          {adding ? (
+            <div className="flex flex-col gap-2">
+              <input
+                autoFocus
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") submit();
+                  if (e.key === "Escape") {
+                    setAdding(false);
+                    setName("");
+                  }
                 }}
-                className="rounded-md border border-neutral-700 px-2 py-1.5 text-xs text-neutral-400 hover:text-neutral-200"
-              >
-                Cancelar
-              </button>
+                placeholder={`Nombre de ${itemLabel}`}
+                className="rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-sm text-neutral-100 outline-none focus:border-deinsa-orange"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={submit}
+                  className="flex-1 rounded-md bg-deinsa-orange px-2 py-1.5 text-xs font-semibold text-neutral-950 hover:bg-deinsa-orange-dark hover:text-neutral-100"
+                >
+                  Agregar
+                </button>
+                <button
+                  onClick={() => {
+                    setAdding(false);
+                    setName("");
+                  }}
+                  className="rounded-md border border-neutral-700 px-2 py-1.5 text-xs text-neutral-400 hover:text-neutral-200"
+                >
+                  Cancelar
+                </button>
+              </div>
             </div>
-          </div>
-        ) : (
-          <button
-            onClick={() => setAdding(true)}
-            className="w-full rounded-md border border-dashed border-neutral-700 py-1.5 text-xs text-neutral-400 hover:border-deinsa-orange hover:text-deinsa-orange"
-          >
-            + {newItemLabel}
-          </button>
-        )}
-      </div>
+          ) : (
+            <button
+              onClick={() => setAdding(true)}
+              className="w-full rounded-md border border-dashed border-neutral-700 py-1.5 text-xs text-neutral-400 hover:border-deinsa-orange hover:text-deinsa-orange"
+            >
+              + {newItemLabel}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
