@@ -24,6 +24,7 @@ export function CardModal({
   onClose,
   onSave,
   onDelete,
+  readonly = false, // 🔥 Nueva propiedad que soluciona el error y bloquea la edición
 }: {
   card: CardItem;
   itemLabel: string;
@@ -40,6 +41,7 @@ export function CardModal({
     }
   ) => void;
   onDelete: (cardId: string) => void;
+  readonly?: boolean;
 }) {
   const [name, setName] = useState(card.name);
   const [comments, setComments] = useState<Comment[]>(card.comments);
@@ -58,9 +60,8 @@ export function CardModal({
 
   const initialContacts = getCardContacts(card);
   const [contacts, setContacts] = useState<Contact[]>(initialContacts);
-  // null = lista cerrada; "new" = agregando; number = editando ese índice.
   const [editingIndex, setEditingIndex] = useState<number | "new" | null>(
-    initialContacts.length === 0 ? "new" : null
+    initialContacts.length === 0 && !readonly ? "new" : null // 🔥 No abre para agregar si es readonly
   );
   const [contactName, setContactName] = useState("");
   const [contactRole, setContactRole] = useState("");
@@ -156,6 +157,7 @@ export function CardModal({
   }
 
   function renderContactForm() {
+    if (readonly) return null; // 🔥 Seguro adicional para que no se renderice si es visualizador
     return (
       <div className="flex flex-col gap-2 rounded-md border border-neutral-800 bg-neutral-900 p-3">
         <input
@@ -258,11 +260,20 @@ export function CardModal({
             <label className="mb-1 block text-xs uppercase tracking-wide text-neutral-500">
               Nombre {itemOfPhrase} {itemLabel}
             </label>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-base font-medium text-neutral-100 outline-none focus:border-deinsa-orange"
-            />
+            
+            {/* 🔥 Si es readonly solo muestra el texto, de lo contrario muestra el input */}
+            {readonly ? (
+              <div className="w-full px-2 py-1.5 text-base font-medium text-neutral-100">
+                {name}
+              </div>
+            ) : (
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-base font-medium text-neutral-100 outline-none focus:border-deinsa-orange"
+              />
+            )}
+
             <p className="mt-1.5 text-xs text-neutral-500">
               Creada el {formatDateTime(card.createdAt)}
             </p>
@@ -273,7 +284,8 @@ export function CardModal({
               <select
                 value={status ?? ""}
                 onChange={handleStatusChange}
-                className="rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-sm text-neutral-100 outline-none focus:border-deinsa-orange"
+                disabled={readonly} // 🔥 Bloquea el cambio de estado si es visualizador
+                className="rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-sm text-neutral-100 outline-none focus:border-deinsa-orange disabled:opacity-70 disabled:cursor-not-allowed"
               >
                 <option value="">Sin estado</option>
                 {(Object.keys(STATUS_CONFIG) as NegotiationStatus[]).map((key) => (
@@ -316,22 +328,26 @@ export function CardModal({
                       {c.countryCode} {c.phone || "Sin teléfono"}
                     </p>
                   </div>
-                  <div className="flex shrink-0 items-center gap-3">
-                    <button
-                      onClick={() => handleEditContactClick(index)}
-                      className="text-xs text-neutral-400 hover:text-deinsa-orange"
-                    >
-                      Editar
-                    </button>
-                    <button
-                      onClick={() => handleDeleteContact(index)}
-                      className="text-neutral-500 hover:text-red-400"
-                      aria-label="Eliminar contacto"
-                      title="Eliminar contacto"
-                    >
-                      ✕
-                    </button>
-                  </div>
+                  
+                  {/* 🔥 Oculta los botones de Editar y Eliminar contacto si es visualizador */}
+                  {!readonly && (
+                    <div className="flex shrink-0 items-center gap-3">
+                      <button
+                        onClick={() => handleEditContactClick(index)}
+                        className="text-xs text-neutral-400 hover:text-deinsa-orange"
+                      >
+                        Editar
+                      </button>
+                      <button
+                        onClick={() => handleDeleteContact(index)}
+                        className="text-neutral-500 hover:text-red-400"
+                        aria-label="Eliminar contacto"
+                        title="Eliminar contacto"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
                 </div>
               )
             )}
@@ -343,7 +359,8 @@ export function CardModal({
             )}
           </div>
 
-          {editingIndex === null && (
+          {/* 🔥 Oculta el botón de agregar contacto si es visualizador */}
+          {!readonly && editingIndex === null && (
             <button
               onClick={handleAddContactClick}
               className="mt-2 w-full rounded-md border border-dashed border-neutral-700 py-1.5 text-xs text-neutral-400 hover:border-deinsa-orange hover:text-deinsa-orange"
@@ -367,14 +384,18 @@ export function CardModal({
                     {formatDateTime(comment.createdAt)}
                   </p>
                 </div>
-                <button
-                  onClick={() => deleteComment(comment.id)}
-                  className="text-neutral-500 hover:text-red-400"
-                  aria-label="Eliminar comentario"
-                  title="Eliminar comentario"
-                >
-                  ✕
-                </button>
+                
+                {/* 🔥 Oculta la "X" para borrar comentarios al visualizador */}
+                {!readonly && (
+                  <button
+                    onClick={() => deleteComment(comment.id)}
+                    className="text-neutral-500 hover:text-red-400"
+                    aria-label="Eliminar comentario"
+                    title="Eliminar comentario"
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
             ))}
             {draftComments.map((text, i) => (
@@ -402,71 +423,83 @@ export function CardModal({
           </div>
         </div>
 
-        <div className="border-t border-neutral-800 px-5 py-4">
-          <label className="mb-1.5 block text-xs uppercase tracking-wide text-neutral-500">
-            Agregar comentario
-          </label>
-          <textarea
-            value={commentText}
-            onChange={(e) => setCommentText(e.target.value)}
-            rows={2}
-            placeholder="Escribe un comentario..."
-            className="w-full resize-none rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-sm text-neutral-100 outline-none focus:border-deinsa-orange"
-          />
-          <div className="mt-2 flex justify-between">
+        {/* 🔥 Footer condicional: Si es readonly solo muestra el botón de Cerrar, sino muestra todos los controles */}
+        {readonly ? (
+          <div className="flex justify-end border-t border-neutral-800 px-5 py-4">
             <button
-              onClick={addDraftComment}
-              className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-neutral-300 hover:border-deinsa-orange hover:text-deinsa-orange"
+              onClick={onClose}
+              className="rounded-md border border-neutral-700 px-4 py-1.5 text-sm font-medium text-neutral-300 hover:bg-neutral-800 hover:text-white transition"
             >
-              Agregar comentario
+              Cerrar
             </button>
-            <div className="flex gap-2">
+          </div>
+        ) : (
+          <div className="border-t border-neutral-800 px-5 py-4">
+            <label className="mb-1.5 block text-xs uppercase tracking-wide text-neutral-500">
+              Agregar comentario
+            </label>
+            <textarea
+              value={commentText}
+              onChange={(e) => setCommentText(e.target.value)}
+              rows={2}
+              placeholder="Escribe un comentario..."
+              className="w-full resize-none rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-sm text-neutral-100 outline-none focus:border-deinsa-orange"
+            />
+            <div className="mt-2 flex justify-between">
               <button
-                onClick={onClose}
-                className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-neutral-400 hover:text-neutral-200"
+                onClick={addDraftComment}
+                className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-neutral-300 hover:border-deinsa-orange hover:text-deinsa-orange"
               >
-                Cerrar sin guardar
+                Agregar comentario
               </button>
-              <button
-                onClick={handleSave}
-                className="rounded-md bg-deinsa-orange px-4 py-1.5 text-xs font-semibold text-neutral-950 hover:bg-deinsa-orange-dark hover:text-neutral-100"
-              >
-                Guardar
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={onClose}
+                  className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-neutral-400 hover:text-neutral-200"
+                >
+                  Cerrar sin guardar
+                </button>
+                <button
+                  onClick={handleSave}
+                  className="rounded-md bg-deinsa-orange px-4 py-1.5 text-xs font-semibold text-neutral-950 hover:bg-deinsa-orange-dark hover:text-neutral-100"
+                >
+                  Guardar
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-4 flex items-center justify-between border-t border-neutral-800 pt-3">
+              {confirmingDelete ? (
+                <div className="flex w-full items-center justify-between">
+                  <span className="text-xs text-neutral-400">
+                    ¿Eliminar esta {itemLabel} permanentemente?
+                  </span>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setConfirmingDelete(false)}
+                      className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-neutral-400 hover:text-neutral-200"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={handleDelete}
+                      className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-neutral-50 hover:bg-red-700"
+                    >
+                      Sí, eliminar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setConfirmingDelete(true)}
+                  className="text-xs text-red-400 hover:text-red-300"
+                >
+                  Eliminar {itemLabel}
+                </button>
+              )}
             </div>
           </div>
-
-          <div className="mt-4 flex items-center justify-between border-t border-neutral-800 pt-3">
-            {confirmingDelete ? (
-              <div className="flex w-full items-center justify-between">
-                <span className="text-xs text-neutral-400">
-                  ¿Eliminar esta {itemLabel} permanentemente?
-                </span>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setConfirmingDelete(false)}
-                    className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-neutral-400 hover:text-neutral-200"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={handleDelete}
-                    className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-neutral-50 hover:bg-red-700"
-                  >
-                    Sí, eliminar
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <button
-                onClick={() => setConfirmingDelete(true)}
-                className="text-xs text-red-400 hover:text-red-300"
-              >
-                Eliminar {itemLabel}
-              </button>
-            )}
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );

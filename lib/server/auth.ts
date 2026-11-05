@@ -19,3 +19,17 @@ export async function getUserInfo() {
     return null;
   }
 }
+
+// Devuelve la sesión solo si puede administrar (administrador o usuario,
+// mismo criterio que el Navbar); null en cualquier otro caso (sin sesión,
+// visualizador o sesión anterior a los roles, sin rol).
+export async function getAdminUser() {
+  const user = await getUserInfo();
+  return user?.rol === "administrador" || user?.rol === "usuario" ? user : null;
+}
+
+// Devuelve la sesión solo si es del administrador (p. ej. eliminar pipelines).
+export async function getAdministrador() {
+  const user = await getUserInfo();
+  return user?.rol === "administrador" ? user : null;
+}

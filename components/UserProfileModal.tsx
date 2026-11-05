@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 
 interface UserProfileModalProps {
-  esSuperAdmin: boolean;
+  rolUsuario: string;
   nombreUsuario: string;
 }
 
@@ -14,34 +14,36 @@ interface UsuarioDB {
   fechaCreacion: string;
 }
 
-export function UserProfileModal({ esSuperAdmin, nombreUsuario }: UserProfileModalProps) {
+export function UserProfileModal({ rolUsuario, nombreUsuario }: UserProfileModalProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [vista, setVista] = useState<"perfil" | "crear" | "editar">("perfil");
   const [mensaje, setMensaje] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  // Estados para Crear
   const [nuevoUsuario, setNuevoUsuario] = useState("");
   const [password, setPassword] = useState("");
   const [rol, setRol] = useState("visualizador");
 
-  // Estados para Listar
   const [listaUsuarios, setListaUsuarios] = useState<UsuarioDB[]>([]);
   const [busqueda, setBusqueda] = useState("");
   const [filtroRol, setFiltroRol] = useState("todos");
   const [cargandoLista, setCargandoLista] = useState(false);
 
-  // Estados para Editar un usuario específico
   const [usuarioEditando, setUsuarioEditando] = useState<UsuarioDB | null>(null);
   const [editNombre, setEditNombre] = useState("");
   const [editPass, setEditPass] = useState("");
   const [editRol, setEditRol] = useState("visualizador");
 
+  const [usuarioAEliminar, setUsuarioAEliminar] = useState<UsuarioDB | null>(null);
+
+  // 🔥 CAMBIO: Ahora SOLO el "administrador" puede ver el menú de crear/editar usuarios
+  const puedeAdministrar = rolUsuario === "administrador";
+
   useEffect(() => {
-    if (vista === "editar" && esSuperAdmin && !usuarioEditando) {
+    if (vista === "editar" && puedeAdministrar && !usuarioEditando) {
       cargarUsuarios();
     }
-  }, [vista, esSuperAdmin, usuarioEditando]);
+  }, [vista, puedeAdministrar, usuarioEditando]);
 
   const cargarUsuarios = async () => {
     setCargandoLista(true);
@@ -85,7 +87,7 @@ export function UserProfileModal({ esSuperAdmin, nombreUsuario }: UserProfileMod
     setUsuarioEditando(u);
     setEditNombre(u.usuario);
     setEditRol(u.rol);
-    setEditPass(""); // La dejamos en blanco
+    setEditPass("");
     setMensaje("");
   };
 
@@ -109,28 +111,46 @@ export function UserProfileModal({ esSuperAdmin, nombreUsuario }: UserProfileMod
       setTimeout(() => {
         setUsuarioEditando(null);
         setMensaje("");
+        cargarUsuarios();
       }, 1500);
     } else {
       setMensaje(data.error || "Error al actualizar");
     }
   };
 
-  const handleEliminar = async (id: string) => {
-    if (!confirm("¿Seguro que deseas eliminar este usuario? Esta acción no se puede deshacer.")) return;
+  const confirmarEliminacion = async () => {
+    if (!usuarioAEliminar) return;
+    setIsLoading(true);
+
     const res = await fetch("/api/usuarios", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
+      body: JSON.stringify({ id: usuarioAEliminar.id }),
     });
-    if (res.ok) cargarUsuarios();
+
+    if (res.ok) {
+      await cargarUsuarios();
+    }
+    setUsuarioAEliminar(null);
+    setIsLoading(false);
   };
 
   const cerrarModal = () => {
     setIsOpen(false);
     setTimeout(() => {
       setVista("perfil"); setMensaje(""); setNuevoUsuario(""); setPassword("");
-      setBusqueda(""); setFiltroRol("todos"); setUsuarioEditando(null);
+      setBusqueda(""); setFiltroRol("todos"); setUsuarioEditando(null); setUsuarioAEliminar(null);
     }, 300);
+  };
+  
+  const volverAtras = () => {
+    if (vista === "editar" && usuarioEditando) {
+      setUsuarioEditando(null);
+      setMensaje("");
+    } else {
+      setVista("perfil");
+      setMensaje("");
+    }
   };
 
   const usuariosFiltrados = listaUsuarios.filter((u) => {
@@ -140,39 +160,43 @@ export function UserProfileModal({ esSuperAdmin, nombreUsuario }: UserProfileMod
 
   return (
     <>
-      <button
-        onClick={() => setIsOpen(true)}
-        className="flex items-center justify-center rounded-md border border-deinsa-orange bg-neutral-900 px-4 py-1.5 text-sm font-bold text-deinsa-orange transition-all hover:bg-deinsa-orange/10 hover:shadow-[0_0_8px_rgba(255,107,0,0.3)]"
-      >
+      <button onClick={() => setIsOpen(true)} className="flex items-center justify-center rounded-md border border-deinsa-orange bg-neutral-900 px-4 py-1.5 text-sm font-bold text-deinsa-orange transition-all hover:bg-deinsa-orange/10 hover:shadow-[0_0_8px_rgba(255,107,0,0.3)]">
         Perfil
       </button>
 
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={cerrarModal}>
-          <div onClick={(e) => e.stopPropagation()} className="flex max-h-[85vh] w-full max-w-md flex-col rounded-xl border border-neutral-800 bg-neutral-950 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div onClick={(e) => e.stopPropagation()} className="flex max-h-[85vh] w-full max-w-md flex-col rounded-xl border border-neutral-800 bg-neutral-950 shadow-xl relative">
             
-            {/* HEADER */}
             <div className="flex items-start justify-between border-b border-neutral-800 px-5 py-4">
-              <div className="flex-1">
-                <label className="mb-1 block text-xs uppercase tracking-wide text-neutral-500">
-                  {vista === "perfil" && "Cuenta de Usuario"}
-                  {vista === "crear" && "Administración"}
-                  {vista === "editar" && "Administración"}
-                </label>
-                <h2 className="text-base font-medium text-neutral-100">
-                  {vista === "perfil" && "Perfil General"}
-                  {vista === "crear" && "Crear Nuevo Usuario"}
-                  {vista === "editar" && !usuarioEditando && "Usuarios Existentes"}
-                  {vista === "editar" && usuarioEditando && "Editar Usuario"}
-                </h2>
+              <div className="flex-1 flex items-center gap-2">
+                {vista !== "perfil" && (
+                  <button onClick={volverAtras} className="text-neutral-400 hover:text-white transition p-1 mr-1" title="Volver">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                  </button>
+                )}
+                
+                <div>
+                  <label className="mb-1 block text-xs uppercase tracking-wide text-neutral-500">
+                    {vista === "perfil" && "Cuenta de Usuario"}
+                    {vista === "crear" && "Administración"}
+                    {vista === "editar" && "Administración"}
+                  </label>
+                  <h2 className="text-base font-medium text-neutral-100">
+                    {vista === "perfil" && "Perfil General"}
+                    {vista === "crear" && "Crear Nuevo Usuario"}
+                    {vista === "editar" && !usuarioEditando && "Usuarios Existentes"}
+                    {vista === "editar" && usuarioEditando && "Editar Usuario"}
+                  </h2>
+                </div>
               </div>
               <button onClick={cerrarModal} className="ml-4 text-neutral-500 hover:text-neutral-200">✕</button>
             </div>
 
-            {/* BODY */}
             <div className="flex-1 overflow-y-auto px-5 py-6">
               
-              {/* VISTA 1: PERFIL */}
               {vista === "perfil" && (
                 <div className="flex flex-col items-center">
                   <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-full border-2 border-neutral-800 bg-neutral-900 text-3xl font-bold text-deinsa-orange uppercase">
@@ -180,10 +204,10 @@ export function UserProfileModal({ esSuperAdmin, nombreUsuario }: UserProfileMod
                   </div>
                   <h3 className="text-lg font-bold text-neutral-100 capitalize">{nombreUsuario}</h3>
                   <p className="mb-6 text-sm text-neutral-500">
-                    Rol: <span className="text-deinsa-orange">{esSuperAdmin ? "Superusuario" : "Visualizador"}</span>
+                    Rol: <span className="text-deinsa-orange capitalize">{rolUsuario}</span>
                   </p>
 
-                  {esSuperAdmin && (
+                  {puedeAdministrar && (
                     <div className="w-full space-y-3 border-t border-neutral-800 pt-6">
                       <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-neutral-500 text-center">Opciones de Administrador</h3>
                       <button onClick={() => setVista("crear")} className="w-full rounded-md border border-neutral-700 bg-neutral-900 py-2 text-sm text-neutral-200 transition-colors hover:border-deinsa-orange hover:text-deinsa-orange">+ Crear Nuevo Usuario</button>
@@ -193,45 +217,43 @@ export function UserProfileModal({ esSuperAdmin, nombreUsuario }: UserProfileMod
                 </div>
               )}
 
-              {/* VISTA 2: CREAR */}
               {vista === "crear" && (
                 <div className="flex flex-col gap-4">
                   <div>
                     <label className="mb-1 block text-xs uppercase tracking-wide text-neutral-500">Nombre de Usuario</label>
-                    <input value={nuevoUsuario} onChange={(e) => setNuevoUsuario(e.target.value)} placeholder="Ej. Luis Umana" className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-sm text-neutral-100 outline-none focus:border-deinsa-orange" />
+                    <input value={nuevoUsuario} onChange={(e) => setNuevoUsuario(e.target.value)} placeholder="Ej. luis.umaña" className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-sm text-neutral-100 outline-none focus:border-deinsa-orange" />
                   </div>
                   <div>
                     <label className="mb-1 block text-xs uppercase tracking-wide text-neutral-500">Contraseña</label>
-                    <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Asigna una contraseña" className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-sm text-neutral-100 outline-none focus:border-deinsa-orange" />
+                    <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Ej. password123" className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-sm text-neutral-100 outline-none focus:border-deinsa-orange" />
                   </div>
                   <div>
                     <label className="mb-1 block text-xs uppercase tracking-wide text-neutral-500">Rol del Usuario</label>
                     <select value={rol} onChange={(e) => setRol(e.target.value)} className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-sm text-neutral-100 outline-none focus:border-deinsa-orange">
+                      <option value="usuario">Usuario (Gestión de CRM)</option>
                       <option value="visualizador">Visualizador (Solo lectura)</option>
-                      <option value="superusuario">Superusuario (Acceso total)</option>
                     </select>
                   </div>
                   {mensaje && <p className={`text-xs mt-2 ${mensaje.includes("éxito") ? "text-green-400" : "text-deinsa-orange"}`}>{mensaje}</p>}
                 </div>
               )}
 
-              {/* VISTA 3: LISTA DE USUARIOS */}
               {vista === "editar" && !usuarioEditando && (
                 <div className="flex flex-col gap-4">
                   <div className="flex gap-2">
-                    <input type="text" placeholder="Buscar por nombre..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} className="flex-1 rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-sm text-neutral-100 outline-none focus:border-deinsa-orange" />
+                    <input type="text" placeholder="Buscar..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} className="flex-1 rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-sm text-neutral-100 outline-none focus:border-deinsa-orange" />
                     <select value={filtroRol} onChange={(e) => setFiltroRol(e.target.value)} className="w-36 rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-sm text-neutral-100 outline-none focus:border-deinsa-orange">
                       <option value="todos">Todos</option>
-                      <option value="superusuario">Superusuarios</option>
+                      <option value="usuario">Usuarios</option>
                       <option value="visualizador">Visualizadores</option>
                     </select>
                   </div>
 
                   <div className="flex flex-col gap-2 mt-2 max-h-60 overflow-y-auto pr-1">
                     {cargandoLista ? (
-                      <p className="text-sm text-neutral-500 text-center py-4">Cargando usuarios...</p>
+                      <p className="text-sm text-neutral-500 text-center py-4">Cargando...</p>
                     ) : usuariosFiltrados.length === 0 ? (
-                      <p className="text-sm text-neutral-500 text-center py-4">No se encontraron usuarios.</p>
+                      <p className="text-sm text-neutral-500 text-center py-4">No hay usuarios.</p>
                     ) : (
                       usuariosFiltrados.map((u) => (
                         <div key={u.id} className="flex items-center justify-between gap-3 rounded-md border border-neutral-800 bg-neutral-900 px-3 py-3">
@@ -239,9 +261,11 @@ export function UserProfileModal({ esSuperAdmin, nombreUsuario }: UserProfileMod
                             <p className="text-sm font-medium text-neutral-200 capitalize">{u.usuario}</p>
                             <p className="text-xs text-neutral-500 capitalize">{u.rol}</p>
                           </div>
-                          <div className="flex gap-3">
-                            <button onClick={() => abrirEdicion(u)} className="text-xs text-neutral-400 hover:text-deinsa-orange transition">Editar</button>
-                            <button onClick={() => handleEliminar(u.id)} className="text-xs text-neutral-500 hover:text-red-400 transition" title="Eliminar usuario">✕</button>
+                          <div className="flex gap-3 items-center">
+                            <button onClick={() => abrirEdicion(u)} className="text-xs text-neutral-400 hover:text-deinsa-orange">Editar</button>
+                            <button onClick={() => setUsuarioAEliminar(u)} className="rounded-md border border-red-900/50 bg-red-950/30 px-2 py-1 text-xs text-red-500 hover:bg-red-900/50 hover:text-red-400 transition-colors">
+                              Borrar
+                            </button>
                           </div>
                         </div>
                       ))
@@ -250,7 +274,6 @@ export function UserProfileModal({ esSuperAdmin, nombreUsuario }: UserProfileMod
                 </div>
               )}
 
-              {/* VISTA 4: FORMULARIO DE EDICIÓN */}
               {vista === "editar" && usuarioEditando && (
                 <div className="flex flex-col gap-4">
                   <div>
@@ -259,13 +282,13 @@ export function UserProfileModal({ esSuperAdmin, nombreUsuario }: UserProfileMod
                   </div>
                   <div>
                     <label className="mb-1 block text-xs uppercase tracking-wide text-neutral-500">Nueva Contraseña <span className="lowercase text-neutral-600">(opcional)</span></label>
-                    <input type="password" value={editPass} onChange={(e) => setEditPass(e.target.value)} placeholder="Déjalo en blanco para mantener la actual" className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-sm text-neutral-100 outline-none focus:border-deinsa-orange" />
+                    <input type="password" value={editPass} onChange={(e) => setEditPass(e.target.value)} placeholder="Ej. password123" className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-sm text-neutral-100 outline-none focus:border-deinsa-orange" />
                   </div>
                   <div>
                     <label className="mb-1 block text-xs uppercase tracking-wide text-neutral-500">Rol del Usuario</label>
                     <select value={editRol} onChange={(e) => setEditRol(e.target.value)} className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-sm text-neutral-100 outline-none focus:border-deinsa-orange">
+                      <option value="usuario">Usuario (Gestión de CRM)</option>
                       <option value="visualizador">Visualizador (Solo lectura)</option>
-                      <option value="superusuario">Superusuario (Acceso total)</option>
                     </select>
                   </div>
                   {mensaje && <p className={`text-xs mt-2 ${mensaje.includes("éxito") || mensaje.includes("actualizado") ? "text-green-400" : "text-deinsa-orange"}`}>{mensaje}</p>}
@@ -273,26 +296,11 @@ export function UserProfileModal({ esSuperAdmin, nombreUsuario }: UserProfileMod
               )}
             </div>
 
-            {/* FOOTER */}
             {vista !== "perfil" && (
               <div className="flex items-center justify-end gap-2 border-t border-neutral-800 px-5 py-4">
-                <button
-                  onClick={() => {
-                    if (vista === "editar" && usuarioEditando) {
-                      setUsuarioEditando(null); setMensaje(""); // Vuelve a la lista
-                    } else {
-                      setVista("perfil"); setMensaje(""); // Vuelve al inicio
-                    }
-                  }}
-                  className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-neutral-400 hover:text-neutral-200"
-                  disabled={isLoading}
-                >
-                  {vista === "editar" && usuarioEditando ? "Cancelar" : "Volver al perfil"}
-                </button>
-                
                 {vista === "crear" && (
                   <button onClick={handleCreateUser} disabled={isLoading} className="rounded-md bg-deinsa-orange px-4 py-1.5 text-xs font-semibold text-neutral-950 hover:opacity-90 disabled:opacity-50">
-                    Guardar usuario
+                    Guardar
                   </button>
                 )}
 
@@ -301,6 +309,33 @@ export function UserProfileModal({ esSuperAdmin, nombreUsuario }: UserProfileMod
                     Actualizar
                   </button>
                 )}
+              </div>
+            )}
+            
+            {usuarioAEliminar && (
+              <div className="absolute inset-0 z-50 flex items-center justify-center rounded-xl bg-black/80 p-6 backdrop-blur-sm">
+                <div className="flex w-full flex-col rounded-lg border border-neutral-700 bg-neutral-900 p-5 shadow-2xl">
+                  <h3 className="mb-2 text-base font-bold text-white">¿Eliminar a este usuario?</h3>
+                  <p className="mb-6 text-sm text-neutral-400">
+                    Estás a punto de borrar a <span className="font-bold text-white">{usuarioAEliminar.usuario}</span>. Esta acción no se puede deshacer.
+                  </p>
+                  <div className="flex justify-end gap-3">
+                    <button
+                      onClick={() => setUsuarioAEliminar(null)}
+                      disabled={isLoading}
+                      className="rounded-md border border-neutral-600 px-4 py-1.5 text-sm text-neutral-300 hover:bg-neutral-800 transition"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={confirmarEliminacion}
+                      disabled={isLoading}
+                      className="rounded-md bg-red-600 px-4 py-1.5 text-sm font-bold text-white hover:bg-red-700 transition disabled:opacity-50"
+                    >
+                      {isLoading ? "Borrando..." : "Sí, borrar"}
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
             
