@@ -41,16 +41,16 @@ function sanitizeForExcel(value: string) {
 }
 
 function formatContactsFieldForExcel(contacts: Contact[], pick: (contact: Contact) => string) {
+  // Sin contactos, la celda no se deja vacía: también se escribe "null".
+  if (contacts.length === 0) return EXCEL_NULL;
   return contacts
     .map((contact) => sanitizeForExcel(pick(contact) ?? "") || EXCEL_NULL)
     .join(EXCEL_SEPARATOR);
 }
 
 function formatCommentsForExcel(comments: Comment[]) {
-  return comments
-    .map((comment) => sanitizeForExcel(comment.text))
-    .filter(Boolean)
-    .join(EXCEL_SEPARATOR);
+  const notes = comments.map((comment) => sanitizeForExcel(comment.text)).filter(Boolean);
+  return notes.length > 0 ? notes.join(EXCEL_SEPARATOR) : EXCEL_NULL;
 }
 
 // Une el mismo campo de todos los contactos de la tarjeta en una sola celda,
