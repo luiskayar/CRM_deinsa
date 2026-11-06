@@ -96,6 +96,22 @@ export async function updateCard(
   return true;
 }
 
+// Borra todas las tarjetas de un pipeline en ambos tableros y devuelve cuántas
+// eran. where por un solo campo no requiere índice compuesto. No sirve para el
+// default: sus tarjetas antiguas no traen pipelineId.
+export async function deletePipelineCards(pipelineId: string) {
+  // BulkWriter reparte las escrituras en lotes y reintenta las que fallan.
+  const writer = adminDb.bulkWriter();
+  let deleted = 0;
+  for (const boardType of Object.keys(BOARD_COLLECTION) as BoardType[]) {
+    const snapshot = await boardCollection(boardType).where("pipelineId", "==", pipelineId).get();
+    snapshot.docs.forEach((doc) => writer.delete(doc.ref));
+    deleted += snapshot.size;
+  }
+  await writer.close();
+  return deleted;
+}
+
 // Devuelve false si la tarjeta no existe o es de otro pipeline.
 export async function deleteCard(boardType: BoardType, pipelineId: string, id: string) {
   const docRef = boardCollection(boardType).doc(id);
