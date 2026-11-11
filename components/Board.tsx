@@ -20,7 +20,7 @@ import { getCardContacts } from "@/lib/contact";
 import { cardsToExportRows, EXPORT_HEADERS, exportRowsToPdf, exportSheetsToExcel } from "@/lib/export";
 import { downloadImportTemplate, importWorkbookFile, ImportSheetOutcome } from "@/lib/import";
 import { normalizeText } from "@/lib/search";
-import { BoardType, CardItem } from "@/lib/types";
+import { BoardType, CardItem, Pipeline } from "@/lib/types";
 import { fetchBoardCards, useBoard } from "@/hooks/useBoard";
 import { Column } from "./Column";
 import { CardModal } from "./CardModal";
@@ -32,10 +32,10 @@ const OTHER_BOARD_TYPE: Record<BoardType, BoardType> = {
   alianzas: "negociaciones",
 };
 
-const AUTO_SCROLL_SPEED = 12; // px por tick mientras el mouse está sobre la flecha
-const ARROW_SCROLL_STEP = 288; // ancho de una columna, para el click/tap
+const AUTO_SCROLL_SPEED = 12; 
+const ARROW_SCROLL_STEP = 288; 
 
-export function Board({ boardType }: { boardType: BoardType }) {
+export function Board({ boardType, pipeline, rolUsuario = "visualizador" }: { boardType: BoardType; pipeline: Pipeline; rolUsuario?: string }) {
   const {
     cards,
     loading,
@@ -44,7 +44,7 @@ export function Board({ boardType }: { boardType: BoardType }) {
     addCard,
     updateCard,
     deleteCard,
-  } = useBoard(boardType);
+  } = useBoard(boardType, pipeline.id);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const columns = BOARD_COLUMNS[boardType];
@@ -53,6 +53,9 @@ export function Board({ boardType }: { boardType: BoardType }) {
   const newItemLabel = BOARD_ITEM_NEW_LABEL[boardType];
 
   const isSearching = search.trim().length > 0;
+  
+  // 🔥 Solo los administradores y usuarios pueden editar o importar
+  const puedeEditar = rolUsuario === "administrador" || rolUsuario === "usuario";
 
   const filteredCards = useMemo(() => {
     if (!isSearching) return cards;
@@ -83,10 +86,10 @@ export function Board({ boardType }: { boardType: BoardType }) {
     setExporting("pdf");
     try {
       await exportRowsToPdf({
-        title: `${BOARD_LABELS[boardType]} — Deinsa CRM`,
+        title: `${BOARD_LABELS[boardType]} — ${pipeline.name} — Deinsa CRM`,
         headers: EXPORT_HEADERS,
         rows: cardsToExportRows(filteredCards, columns),
-        filename: `${boardType}-${new Date().toISOString().slice(0, 10)}.pdf`,
+        filename: `${pipeline.id}-${boardType}-${new Date().toISOString().slice(0, 10)}.pdf`,
       });
     } catch (err) {
       console.error(err);
@@ -101,20 +104,20 @@ export function Board({ boardType }: { boardType: BoardType }) {
     setExporting("excel");
     try {
       const otherBoardType = OTHER_BOARD_TYPE[boardType];
-      const otherCards = await fetchBoardCards(otherBoardType);
+      const otherCards = await fetchBoardCards(otherBoardType, pipeline.id);
       const currentSheet = {
         name: EXPORT_SHEET_NAME[boardType],
         headers: EXPORT_HEADERS,
-        rows: cardsToExportRows(filteredCards, columns),
+        rows: cardsToExportRows(filteredCards, columns, "excel"),
       };
       const otherSheet = {
         name: EXPORT_SHEET_NAME[otherBoardType],
         headers: EXPORT_HEADERS,
-        rows: cardsToExportRows(otherCards, BOARD_COLUMNS[otherBoardType]),
+        rows: cardsToExportRows(otherCards, BOARD_COLUMNS[otherBoardType], "excel"),
       };
       await exportSheetsToExcel({
         sheets: boardType === "negociaciones" ? [currentSheet, otherSheet] : [otherSheet, currentSheet],
-        filename: `deinsa-crm-${new Date().toISOString().slice(0, 10)}.xlsx`,
+        filename: `deinsa-crm-${pipeline.id}-${new Date().toISOString().slice(0, 10)}.xlsx`,
       });
     } catch (err) {
       console.error(err);
@@ -137,14 +140,11 @@ export function Board({ boardType }: { boardType: BoardType }) {
     setImportError(null);
     setImporting(true);
     try {
-      // Ya no necesitamos traer las cartas del otro tablero
-      // porque solo vamos a importar al tablero actual (boardType)
       const existingCardsByBoard = {
         [boardType]: cards,
       } as Record<BoardType, CardItem[]>;
       
-      // 🔥 Le pasamos a la función `boardType` para que sepa dónde estamos
-      const outcomes = await importWorkbookFile(file, existingCardsByBoard, boardType);
+      const outcomes = await importWorkbookFile(file, existingCardsByBoard, boardType, pipeline.id);
       setImportResult(outcomes);
     } catch (err) {
       console.error(err);
@@ -209,6 +209,8 @@ export function Board({ boardType }: { boardType: BoardType }) {
   );
 
   function handleDragEnd(event: DragEndEvent) {
+    if (!puedeEditar) return; 
+    
     const { active, over } = event;
     if (!over) return;
     const cardId = String(active.id);
@@ -255,28 +257,34 @@ export function Board({ boardType }: { boardType: BoardType }) {
           >
             {exporting === "excel" ? "Generando..." : "Exportar Excel"}
           </button>
-          <button
-            type="button"
-            onClick={() => downloadImportTemplate()}
-            className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-neutral-300 hover:border-deinsa-orange hover:text-deinsa-orange"
-          >
-            Plantilla de importación
-          </button>
-          <button
-            type="button"
-            onClick={() => importInputRef.current?.click()}
-            disabled={importing}
-            className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-neutral-300 hover:border-deinsa-orange hover:text-deinsa-orange disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {importing ? "Importando..." : "Importar Excel"}
-          </button>
-          <input
-            ref={importInputRef}
-            type="file"
-            accept=".xlsx"
-            onChange={handleImportFile}
-            className="hidden"
-          />
+          
+          {/* 🔥 Solo renderizamos los botones de importación si el usuario NO es visualizador */}
+          {puedeEditar && (
+            <>
+              <button
+                type="button"
+                onClick={() => downloadImportTemplate()}
+                className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-neutral-300 hover:border-deinsa-orange hover:text-deinsa-orange"
+              >
+                Plantilla de importación
+              </button>
+              <button
+                type="button"
+                onClick={() => importInputRef.current?.click()}
+                disabled={importing}
+                className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-neutral-300 hover:border-deinsa-orange hover:text-deinsa-orange disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {importing ? "Importando..." : "Importar Excel"}
+              </button>
+              <input
+                ref={importInputRef}
+                type="file"
+                accept=".xlsx"
+                onChange={handleImportFile}
+                className="hidden"
+              />
+            </>
+          )}
         </div>
       </div>
 
@@ -327,6 +335,7 @@ export function Board({ boardType }: { boardType: BoardType }) {
                 newItemLabel={newItemLabel}
                 onCardClick={setSelectedCardId}
                 onAddCard={(name) => addCard(column.id, name)}
+                puedeEditar={puedeEditar} /* 🔥 Aquí bloqueamos los botones de nueva tarjeta al fondo de la columna */
               />
             ))}
           </div>
@@ -357,6 +366,7 @@ export function Board({ boardType }: { boardType: BoardType }) {
           onClose={() => setSelectedCardId(null)}
           onSave={updateCard}
           onDelete={deleteCard}
+          readonly={!puedeEditar} 
         />
       )}
 

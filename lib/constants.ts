@@ -1,5 +1,22 @@
 import { getCountries, getCountryCallingCode } from "libphonenumber-js";
-import { BoardType, Column, NegotiationStatus } from "./types";
+import { BoardType, Column, NegotiationStatus, Pipeline } from "./types";
+
+// Pipeline de las tarjetas que ya existían antes de 5.2.2. No se guarda en
+// Firestore: siempre existe, y toda tarjeta sin pipelineId pertenece a él.
+export const DEFAULT_PIPELINE: Pipeline = { id: "deinsa", name: "Deinsa Global" };
+
+export const PIPELINE_COLLECTION = "crm_pipelines";
+
+export const PIPELINE_NAME_MAX_LENGTH = 50;
+
+// Slugs que no pueden usarse como pipeline: el default y las rutas propias de la app.
+export const RESERVED_PIPELINE_SLUGS = new Set([
+  DEFAULT_PIPELINE.id,
+  "login",
+  "api",
+  "negociaciones",
+  "alianzas",
+]);
 
 export const BOARD_COLUMNS: Record<BoardType, Column[]> = {
   negociaciones: [
