@@ -26,6 +26,7 @@ import { Column } from "./Column";
 import { CardModal } from "./CardModal";
 import { ImportResultModal } from "./ImportResultModal";
 import { SearchBar } from "./SearchBar";
+import { ZadarmaPhone } from "./ZadarmaPhone";
 
 const OTHER_BOARD_TYPE: Record<BoardType, BoardType> = {
   negociaciones: "alianzas",
@@ -234,6 +235,7 @@ export function Board({ boardType, pipeline, rolUsuario = "visualizador" }: { bo
 
   return (
     <DndContext id={`board-${boardType}`} sensors={sensors} onDragEnd={handleDragEnd}>
+      <ZadarmaPhone />
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 px-6 pt-4">
         <SearchBar
           value={search}
