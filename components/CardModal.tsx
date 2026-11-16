@@ -332,6 +332,21 @@ export function CardModal({
                   {/* 🔥 Oculta los botones de Editar y Eliminar contacto si es visualizador */}
                   {!readonly && (
                     <div className="flex shrink-0 items-center gap-3">
+                      {c.phone && (
+                        <button
+                          onClick={() =>
+                            window.dispatchEvent(
+                              new CustomEvent("crm:llamar", {
+                                detail: { phone: `${c.countryCode}${(c.phone ?? "").replace(/\D/g, "")}` },
+                              })
+                            )
+                          }
+                          title={`Llamar a ${c.name ?? "contacto"}`}
+                          className="text-xs text-neutral-400 hover:text-green-400"
+                        >
+                          📞 Llamar
+                        </button>
+                      )}
                       <button
                         onClick={() => handleEditContactClick(index)}
                         className="text-xs text-neutral-400 hover:text-deinsa-orange"
