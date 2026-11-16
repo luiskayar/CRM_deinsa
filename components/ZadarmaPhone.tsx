@@ -10,14 +10,31 @@ import { useEffect, useRef, useState } from "react";
 // Requiere HTTPS (o localhost) y el dominio registrado en el panel de
 // Zadarma: Configuración → Integraciones y API → widget WebRTC.
 
+// URLs del snippet oficial del panel de Zadarma (Integraciones y API → WebRTC).
 const WIDGET_SCRIPTS = [
-  "https://my.zadarma.com/webphoneWebRTCWidget/v8/js/loader-phone-lib.js?v=17",
-  "https://my.zadarma.com/webphoneWebRTCWidget/v8/js/loader-phone-fn.js?v=17",
+  "https://my.zadarma.com/webphoneWebRTCWidget/v9/js/loader-phone-lib.js?sub_v=3",
+  "https://my.zadarma.com/webphoneWebRTCWidget/v9/js/loader-phone-fn.js?sub_v=2",
 ];
 
 // El widget solo puede montarse una vez por carga de página, aunque el
 // tablero se desmonte y se vuelva a montar al navegar entre pipelines.
 let widgetLoaded = false;
+
+// El loader de Zadarma carga a su vez más recursos de forma asíncrona:
+// zadarmaWidgetFn existe de inmediato, pero la interfaz interna
+// (zdrmWebrtcPhoneInterface) tarda un poco más. Hay que esperarla.
+function waitForGlobal(name: string, timeoutMs = 8000) {
+  return new Promise<void>((resolve) => {
+    const start = Date.now();
+    const timer = window.setInterval(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if ((window as any)[name] !== undefined || Date.now() - start > timeoutMs) {
+        window.clearInterval(timer);
+        resolve();
+      }
+    }, 150);
+  });
+}
 
 function loadScript(src: string) {
   return new Promise<void>((resolve, reject) => {
@@ -77,11 +94,12 @@ export function ZadarmaPhone() {
         const { key, sip } = await res.json();
 
         for (const src of WIDGET_SCRIPTS) await loadScript(src);
+        await waitForGlobal("zdrmWebrtcPhoneInterface");
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const widgetFn = (window as any).zadarmaWidgetFn;
         if (typeof widgetFn !== "function") throw new Error("zadarmaWidgetFn no está disponible");
-        widgetFn(key, sip, "rounded", "es", true, "{right:'16px',bottom:'16px'}");
+        widgetFn(key, sip, "rounded", "es", true, { right: "16px", bottom: "16px" });
 
         widgetLoaded = true;
         if (!cancelled) setStatus("listo");
