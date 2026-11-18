@@ -221,6 +221,26 @@ export function ZadarmaPhone() {
       mostrarAviso("El teléfono aún se está cargando, espera un momento.");
       return;
     }
+
+    // Permiso de micrófono: una llamada WebRTC NO conecta sin micrófono. Como
+    // el widget va oculto y lo marcamos con clicks sintéticos, el navegador no
+    // muestra el aviso por sí solo, así que lo pedimos aquí, dentro del gesto
+    // real del usuario (el click en "Llamar"). Una vez concedido, el navegador
+    // lo recuerda y el widget de Zadarma ya puede usar el audio.
+    if (navigator.mediaDevices?.getUserMedia) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // Liberamos el stream de prueba: solo nos interesaba el permiso.
+        stream.getTracks().forEach((t) => t.stop());
+      } catch (err) {
+        console.error("Permiso de micrófono denegado:", err);
+        mostrarAviso(
+          "Necesito permiso de micrófono para llamar. Pulsa el candado 🔒 de la barra del navegador → Micrófono → Permitir, y vuelve a intentarlo."
+        );
+        return;
+      }
+    }
+
     setLlamada("marcando");
     const ok = await dialWithRetry(limpio);
     if (!ok) {
